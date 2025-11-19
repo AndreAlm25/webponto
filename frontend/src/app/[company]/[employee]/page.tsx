@@ -1,5 +1,5 @@
 "use client"
-import { notFound } from 'next/navigation'
+import { notFound, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useWebSocket } from '@/contexts/WebSocketContext'
 import { useMessages } from '@/hooks/useMessages'
@@ -17,10 +17,19 @@ const comfortaa = Comfortaa({ subsets: ['latin'], weight: ['400', '700'] })
 const roboto = Roboto({ subsets: ['latin'], weight: ['400', '700', '900'] })
 
 export default function EmployeeCompanyPage({ params }: { params: { company: string, employee: string } }) {
-  const { logout, user, refreshUser } = useAuth()
+  const router = useRouter()
+  const { logout, user, refreshUser, loading: authLoading, isAuthenticated } = useAuth()
   const { onTimeEntryCreated, onEmployeeUpdated, onFaceRegistered, onFaceDeleted, connected } = useWebSocket()
   const { unreadCount } = useMessages()
   const { company, employee } = params
+  
+  // Proteção de rota: redirecionar para login se não autenticado
+  React.useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      console.log('[AUTH] Usuário não autenticado, redirecionando para login...')
+      router.push('/login')
+    }
+  }, [authLoading, isAuthenticated, router])
   
   // Estado do user
   React.useEffect(() => {
@@ -28,6 +37,23 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
   }, [user])
   
   if (!company || !employee) notFound()
+  
+  // Mostrar loading enquanto verifica autenticação
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Verificando autenticação...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  // Não renderizar nada se não estiver autenticado (vai redirecionar)
+  if (!isAuthenticated) {
+    return null
+  }
 
   const [now, setNow] = React.useState<Date | null>(null)
   const [mounted, setMounted] = React.useState(false)
@@ -860,8 +886,10 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
               />
             )}
           </div>
+            </>
+          )}
 
-          {/* Botão de mensagem */}
+          {/* Botão de mensagem - SEMPRE visível, independente de ponto remoto */}
           <div className="mt-6">
             <ActionButton
               label="MESSAGE"
@@ -876,8 +904,6 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
               hoverClass="hover:bg-accent"
             />
           </div>
-            </>
-          )}
 
           {/* Logo da empresa */}
           <div className="mt-6 flex items-center justify-center">
