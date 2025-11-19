@@ -1,0 +1,11 @@
+{
+  "name": "WebPonto - Sistema de Ponto Eletrônico",
+  "short_name": "WebPonto",
+  "description": "Sistema completo de controle de ponto com reconhecimento facial",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": []
+}

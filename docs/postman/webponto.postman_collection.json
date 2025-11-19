@@ -1,0 +1,80 @@
+{
+  "info": {
+    "name": "WebPonto API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "2f7e7e2a-6e1a-4c2a-9a11-9f0a5c9e8e01"
+  },
+  "item": [
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/api/auth/login",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "auth", "login"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@empresateste.com.br\",\n  \"password\": \"admin123\"\n}"
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Employees - Facial Status",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{BASE_URL}}/api/employees/{{EMPLOYEE_ID}}/facial-status",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "employees", "{{EMPLOYEE_ID}}", "facial-status"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Time Entries - Facial Register",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{BASE_URL}}/api/time-entries/facial/cadastro",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "time-entries", "facial", "cadastro"]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "image", "type": "file", "src": [] }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Time Entries - Facial Recognize",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{BASE_URL}}/api/time-entries/facial",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "time-entries", "facial"]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "image", "type": "file", "src": [] }
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    { "key": "BASE_URL", "value": "http://localhost:4000" },
+    { "key": "EMPLOYEE_ID", "value": "1" }
+  ]
+}

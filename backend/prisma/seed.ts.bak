@@ -1,0 +1,186 @@
+import { PrismaClient } from '@prisma/client'
+import * as bcrypt from 'bcrypt'
+
+const prisma = new PrismaClient()
+
+async function main() {
+  console.log('🌱 Iniciando seed do banco de dados...')
+
+  // Limpar dados existentes (apenas em desenvolvimento!)
+  console.log('🗑️  Limpando dados existentes...')
+  await prisma.timeEntry.deleteMany()
+  await prisma.employee.deleteMany()
+  await prisma.user.deleteMany()
+  await prisma.company.deleteMany()
+
+  // 1. Criar Empresa Teste
+  console.log('🏢 Criando empresa teste...')
+  const empresa = await prisma.company.create({
+    data: {
+      razaoSocial: 'Empresa Teste Ltda',
+      nomeFantasia: 'Empresa Teste',
+      cnpj: '12.345.678/0001-90',
+      email: 'contato@empresateste.com.br',
+      ativo: true,
+    },
+  })
+  console.log(`✅ Empresa criada: ${empresa.nomeFantasia} (ID: ${empresa.id})`)
+
+  // 2. Criar Admin Master
+  console.log('👤 Criando usuário admin...')
+  const senhaAdmin = await bcrypt.hash('admin123', 10)
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin@empresateste.com.br',
+      nome: 'Admin Master',
+      senha: senhaAdmin,
+      role: 'ADMIN_EMPRESA',
+      ativo: true,
+      empresaId: empresa.id,
+    },
+  })
+  console.log(`✅ Admin criado: ${admin.nome} (${admin.email})`)
+
+  // 3. Criar Usuários e Funcionários de Teste
+  console.log('👥 Criando usuários e funcionários...')
+  
+  const senhaFunc = await bcrypt.hash('senha123', 10)
+  
+  // Usuário e Funcionário 1
+  const usuario1 = await prisma.user.create({
+    data: {
+      email: 'joao.silva@empresateste.com.br',
+      nome: 'João Silva',
+      senha: senhaFunc,
+      role: 'FUNCIONARIO',
+      ativo: true,
+      empresaId: empresa.id,
+    },
+  })
+
+  const funcionario1 = await prisma.employee.create({
+    data: {
+      nome: 'João Silva',
+      cpf: '123.456.789-00',
+      matricula: 'FUNC001',
+      dataAdmissao: new Date('2024-01-15'),
+      salarioBase: 5000.00,
+      empresaId: empresa.id,
+      usuarioId: usuario1.id,
+      ativo: true,
+      faceRegistrada: false,
+    },
+  })
+  console.log(`✅ Funcionário criado: ${funcionario1.nome} (ID: ${funcionario1.id})`)
+
+  // Usuário e Funcionário 2
+  const usuario2 = await prisma.user.create({
+    data: {
+      email: 'maria.santos@empresateste.com.br',
+      nome: 'Maria Santos',
+      senha: senhaFunc,
+      role: 'FUNCIONARIO',
+      ativo: true,
+      empresaId: empresa.id,
+    },
+  })
+
+  const funcionario2 = await prisma.employee.create({
+    data: {
+      nome: 'Maria Santos',
+      cpf: '987.654.321-00',
+      matricula: 'FUNC002',
+      dataAdmissao: new Date('2024-02-01'),
+      salarioBase: 4500.00,
+      empresaId: empresa.id,
+      usuarioId: usuario2.id,
+      ativo: true,
+      faceRegistrada: false,
+    },
+  })
+  console.log(`✅ Funcionário criado: ${funcionario2.nome} (ID: ${funcionario2.id})`)
+
+  // Usuário e Funcionário 3
+  const usuario3 = await prisma.user.create({
+    data: {
+      email: 'pedro.oliveira@empresateste.com.br',
+      nome: 'Pedro Oliveira',
+      senha: senhaFunc,
+      role: 'GESTOR',
+      ativo: true,
+      empresaId: empresa.id,
+    },
+  })
+
+  const funcionario3 = await prisma.employee.create({
+    data: {
+      nome: 'Pedro Oliveira',
+      cpf: '456.789.123-00',
+      matricula: 'FUNC003',
+      dataAdmissao: new Date('2023-11-10'),
+      salarioBase: 7000.00,
+      empresaId: empresa.id,
+      usuarioId: usuario3.id,
+      ativo: true,
+      faceRegistrada: false,
+    },
+  })
+  console.log(`✅ Funcionário criado: ${funcionario3.nome} (ID: ${funcionario3.id})`)
+
+  // 4. Criar alguns pontos de exemplo (opcional)
+  console.log('⏰ Criando pontos de exemplo...')
+  
+  const hoje = new Date()
+  hoje.setHours(8, 0, 0, 0)
+  
+  await prisma.timeEntry.create({
+    data: {
+      empresaId: empresa.id,
+      funcionarioId: funcionario1.id,
+      tipo: 'ENTRADA',
+      timestamp: hoje,
+      reconhecimentoValido: true,
+      similarity: 0.98,
+      sincronizado: true,
+      status: 'VALIDO',
+    },
+  })
+  console.log(`✅ Ponto de exemplo criado para ${funcionario1.nome}`)
+
+  console.log('\n✅ Seed concluído com sucesso!')
+  console.log('\n📋 Dados Criados:')
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.log(`🏢 Empresa: ${empresa.nomeFantasia}`)
+  console.log(`   ID: ${empresa.id}`)
+  console.log(`   CNPJ: ${empresa.cnpj}`)
+  console.log('')
+  console.log(`👤 Admin: ${admin.nome}`)
+  console.log(`   Email: ${admin.email}`)
+  console.log(`   Senha: admin123`)
+  console.log('')
+  console.log(`👥 Funcionários:`)
+  console.log(`   1. ${funcionario1.nome} (ID: ${funcionario1.id})`)
+  console.log(`      Email: ${usuario1.email}`)
+  console.log(`      Senha: senha123`)
+  console.log('')
+  console.log(`   2. ${funcionario2.nome} (ID: ${funcionario2.id})`)
+  console.log(`      Email: ${usuario2.email}`)
+  console.log(`      Senha: senha123`)
+  console.log('')
+  console.log(`   3. ${funcionario3.nome} (ID: ${funcionario3.id})`)
+  console.log(`      Email: ${usuario3.email}`)
+  console.log(`      Senha: senha123`)
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.log('\n📝 Próximos passos:')
+  console.log('1. Cadastrar face de um funcionário em: http://localhost:3000/ponto/facial?mode=cadastro&id=1')
+  console.log('2. Testar reconhecimento em: http://localhost:3000/ponto/facial')
+}
+
+main()
+  .catch((e) => {
+    console.error('❌ Erro no seed:', e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

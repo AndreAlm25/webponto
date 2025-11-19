@@ -1,0 +1,405 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                       String          @id @default(uuid()) @db.Uuid
+  slug                     String?         @unique
+  cnpj                     String          @unique
+  legalName                String
+  tradeName                String
+  email                    String
+  active                   Boolean         @default(true)
+  logoUrl                  String?
+  plan                     CompanyPlan     @default(TRIAL)
+  status                   CompanyStatus   @default(ACTIVE)
+  latitude                 Float?
+  longitude                Float?
+  allowRemoteClockIn       Boolean         @default(false)
+  requireGeolocation       Boolean         @default(false)
+  minGeoAccuracyMeters     Int?
+  geofencingEnabled        Boolean         @default(false)
+  geofencePolicy           GeofencePolicy?
+  requireFacialRecognition Boolean         @default(false)
+  requireLiveness          Boolean         @default(false)
+  workingHoursStart        String          @default("08:00")
+  workingHoursEnd          String          @default("18:00")
+  timezone                 String?
+  toleranceEntryAfterMin   Int?
+  toleranceExitAfterMin    Int?
+  stripeCustomerId         String?
+  stripeSubscriptionId     String?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  address                  Address?        @relation("CompanyAddress")
+  contactInfo              ContactInfo?    @relation("CompanyContactInfo")
+  departments              Department[]
+  employees                Employee[]
+  faceProfiles             FaceProfile[]
+  geofences                Geofence[]
+  messageThreads           MessageThread[]
+  messages                 Message[]
+  notifications            Notification[]
+  positions                Position[]
+  timeEntries              TimeEntry[]
+  users                    User[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  companyId    String    @db.Uuid
+  email        String    @unique
+  password     String
+  name         String
+  cpf          String?   @unique
+  phone        String?
+  role         Role      @default(EMPLOYEE)
+  active       Boolean   @default(true)
+  avatarUrl    String?
+  employeeId   String?   @unique @db.Uuid
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sentMessages Message[]
+  company      Company   @relation(fields: [companyId], references: [id])
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+model Employee {
+  id                     String          @id @default(uuid()) @db.Uuid
+  companyId              String          @db.Uuid
+  registrationId         String
+  hireDate               DateTime
+  baseSalary             Decimal         @db.Decimal(10, 2)
+  positionId             String?         @db.Uuid
+  departmentId           String?         @db.Uuid
+  faceId                 String?
+  faceRegistered         Boolean         @default(false)
+  allowRemoteClockIn     Boolean         @default(false) // Permite bater ponto pelo painel (com geolocalização/cerca)
+  allowFacialRecognition Boolean         @default(false)
+  requireLiveness        Boolean         @default(false)
+  requireGeolocation     Boolean         @default(false) // @deprecated - usar geofenceId ao invés
+  minGeoAccuracyMeters   Int? // @deprecated - precisão está na cerca (geofence.radiusMeters)
+  timezone               String?
+  active                 Boolean         @default(true)
+  workStartTime          String          @default("08:00")
+  workEndTime            String          @default("18:00")
+  breakStartTime         String?
+  breakEndTime           String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  geofenceId             String?         @db.Uuid
+  address                Address?        @relation("EmployeeAddress")
+  contactInfo            ContactInfo?    @relation("EmployeeContactInfo")
+  company                Company         @relation(fields: [companyId], references: [id])
+  department             Department?     @relation(fields: [departmentId], references: [id])
+  geofence               Geofence?       @relation(fields: [geofenceId], references: [id])
+  position               Position?       @relation(fields: [positionId], references: [id])
+  faceProfiles           FaceProfile[]
+  messageThreads         MessageThread[]
+  messages               Message[]
+  sentMessages           Message[]       @relation("SenderEmployee")
+  timeEntries            TimeEntry[]
+  user                   User?
+
+  @@unique([companyId, registrationId])
+  @@map("employees")
+}
+
+model TimeEntry {
+  id                  String          @id @default(uuid()) @db.Uuid
+  companyId           String          @db.Uuid
+  employeeId          String          @db.Uuid
+  timestamp           DateTime
+  type                TimeEntryType
+  method              ClockMethod     @default(MANUAL)
+  location            String?
+  notes               String?
+  photoUrl            String?
+  recognitionValid    Boolean         @default(false)
+  similarity          Float?
+  livenessScore       Float?
+  livenessValid       Boolean?
+  recognitionProvider FaceProvider?
+  confidenceScore     Float?
+  justification       String?
+  latitude            Float?
+  longitude           Float?
+  accuracy            Float?
+  clientCapturedAt    DateTime?
+  geoMethod           String?
+  source              String?
+  ip                  String?
+  geofenceStatus      GeofenceStatus?
+  geofenceId          String?         @db.Uuid
+  synchronized        Boolean         @default(true)
+  status              TimeEntryStatus @default(VALID)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  company             Company         @relation(fields: [companyId], references: [id])
+  employee            Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, timestamp])
+  @@index([companyId, timestamp])
+  @@map("time_entries")
+}
+
+model Geofence {
+  id           String     @id @default(uuid()) @db.Uuid
+  companyId    String     @db.Uuid
+  name         String
+  centerLat    Float
+  centerLng    Float
+  radiusMeters Int
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  employees    Employee[]
+  company      Company    @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, active])
+  @@map("geofences")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  companyId String           @db.Uuid
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  company   Company          @relation(fields: [companyId], references: [id])
+
+  @@map("notifications")
+}
+
+model Position {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String
+  companyId String     @db.Uuid
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  employees Employee[]
+  company   Company    @relation(fields: [companyId], references: [id])
+
+  @@unique([name, companyId])
+  @@map("positions")
+}
+
+model Department {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String
+  companyId String     @db.Uuid
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  company   Company    @relation(fields: [companyId], references: [id])
+  employees Employee[]
+
+  @@unique([name, companyId])
+  @@map("departments")
+}
+
+model FaceProfile {
+  id         String            @id @default(uuid()) @db.Uuid
+  employeeId String            @db.Uuid
+  companyId  String            @db.Uuid
+  provider   FaceProvider      @default(COMPREFACE)
+  subjectId  String
+  status     FaceProfileStatus @default(REGISTERED)
+  notes      String?
+  lastSyncAt DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  company    Company           @relation(fields: [companyId], references: [id])
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+
+  @@unique([provider, subjectId, companyId])
+  @@index([employeeId, companyId])
+  @@map("face_profiles")
+}
+
+model MessageThread {
+  id         String       @id @default(uuid()) @db.Uuid
+  companyId  String       @db.Uuid
+  employeeId String       @db.Uuid
+  subject    String?
+  status     ThreadStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  company    Company      @relation(fields: [companyId], references: [id])
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@unique([companyId, employeeId])
+  @@index([employeeId, status])
+  @@map("message_threads")
+}
+
+model Message {
+  id               String              @id @default(uuid()) @db.Uuid
+  threadId         String              @db.Uuid
+  companyId        String              @db.Uuid
+  employeeId       String              @db.Uuid
+  senderUserId     String?             @db.Uuid
+  senderEmployeeId String?             @db.Uuid
+  type             MessageType         @default(TEXT)
+  content          String?
+  isRead           Boolean             @default(false)
+  readAt           DateTime?
+  createdAt        DateTime            @default(now())
+  attachments      MessageAttachment[]
+  company          Company             @relation(fields: [companyId], references: [id])
+  employee         Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  senderEmployee   Employee?           @relation("SenderEmployee", fields: [senderEmployeeId], references: [id], onDelete: Cascade)
+  senderUser       User?               @relation(fields: [senderUserId], references: [id])
+  thread           MessageThread       @relation(fields: [threadId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@index([employeeId, createdAt])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  messageId    String   @db.Uuid
+  url          String
+  filename     String
+  mimeType     String?
+  sizeBytes    Int?
+  thumbnailUrl String?  // URL da thumbnail (para PDFs)
+  pageCount    Int?     // Número de páginas (para PDFs)
+  createdAt    DateTime @default(now())
+  message      Message  @relation(fields: [messageId], references: [id])
+
+  @@map("message_attachments")
+}
+
+model ContactInfo {
+  id                         String    @id @default(uuid()) @db.Uuid
+  companyId                  String?   @unique @db.Uuid
+  employeeId                 String?   @unique @db.Uuid
+  phoneFixed                 String?
+  phoneWhatsapp              String?
+  allowWhatsappNotifications Boolean   @default(false)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  company                    Company?  @relation("CompanyContactInfo", fields: [companyId], references: [id])
+  employee                   Employee? @relation("EmployeeContactInfo", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("contact_info")
+}
+
+model Address {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String?   @unique @db.Uuid
+  employeeId String?   @unique @db.Uuid
+  zipCode    String
+  street     String
+  number     String
+  complement String?
+  district   String
+  city       String
+  state      String
+  reference  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  company    Company?  @relation("CompanyAddress", fields: [companyId], references: [id])
+  employee   Employee? @relation("EmployeeAddress", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+enum Role {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  MANAGER
+  HR
+  EMPLOYEE
+  FINANCIAL
+}
+
+enum TimeEntryType {
+  CLOCK_IN
+  CLOCK_OUT
+  BREAK_START
+  BREAK_END
+}
+
+enum TimeEntryStatus {
+  VALID
+  PENDING
+  INVALID
+  ADJUSTED
+  SUSPICIOUS
+}
+
+enum GeofenceStatus {
+  INSIDE
+  OUTSIDE
+  BORDERLINE
+}
+
+enum ClockMethod {
+  MANUAL
+  FACIAL_RECOGNITION
+  QR_CODE
+}
+
+enum CompanyPlan {
+  TRIAL
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum NotificationType {
+  TIMECLOCK
+  SYSTEM
+  PAYMENT
+  SECURITY
+}
+
+enum GeofencePolicy {
+  ALLOW
+  BLOCK
+  ALLOW_WITH_JUSTIFICATION
+  REQUIRE_LIVENESS
+}
+
+enum FaceProvider {
+  COMPREFACE
+}
+
+enum FaceProfileStatus {
+  REGISTERED
+  REMOVED
+  PENDING
+}
+
+enum ThreadStatus {
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+enum MessageType {
+  TEXT
+  FILE
+}

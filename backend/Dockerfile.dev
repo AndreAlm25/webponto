@@ -1,0 +1,24 @@
+FROM node:20-slim
+
+# Instalar OpenSSL e outras dependências
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar package files
+COPY package*.json ./
+
+# Instalar dependências
+RUN npm install
+
+# Copiar código fonte (será sobrescrito pelo volume)
+COPY . .
+
+# Gerar Prisma Client
+RUN npx prisma generate
+
+# Expor porta
+EXPOSE 4000
+
+# Comando de desenvolvimento com hot reload
+CMD ["npm", "run", "start:dev"]

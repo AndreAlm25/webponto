@@ -1,0 +1,216 @@
+{
+  "companies": [
+    {
+      "cnpj": "11.111.111/0001-91",
+      "legalName": "WebPonto Global Ltda",
+      "tradeName": "WebPonto Global",
+      "email": "contato@webponto.com.br",
+      "plan": "TRIAL",
+      "logoImage": "images/companies/webponto-global.png",
+      "address": {
+        "zipCode": "01310-000",
+        "street": "Avenida Paulista",
+        "number": "1000",
+        "complement": "Conjunto 1201",
+        "district": "Bela Vista",
+        "city": "São Paulo",
+        "state": "SP",
+        "reference": "Próximo ao MASP"
+      },
+      "contactInfo": {
+        "phoneFixed": "(11) 3000-0000",
+        "phoneWhatsapp": "(11) 90000-0001",
+        "allowWhatsappNotifications": true
+      },
+      "user": {
+        "email": "superadmin@webponto.com.br",
+        "name": "Super Admin",
+        "password": "123456*",
+        "role": "SUPER_ADMIN"
+      }
+    },
+    {
+      "cnpj": "45.987.321/0001-55",
+      "legalName": "Acme Tecnologia do Brasil Ltda",
+      "tradeName": "Acme Tech",
+      "email": "contato@acmetech.com.br",
+      "plan": "BASIC",
+      "logoImage": "images/companies/acme-tech.png",
+      "address": {
+        "zipCode": "04538-132",
+        "street": "Rua Funchal",
+        "number": "200",
+        "complement": "Torre B, 7º andar",
+        "district": "Vila Olímpia",
+        "city": "São Paulo",
+        "state": "SP",
+        "reference": "Próximo ao Shopping Vila Olímpia"
+      },
+      "contactInfo": {
+        "phoneFixed": "(11) 3500-1234",
+        "phoneWhatsapp": "(11) 98888-7777",
+        "allowWhatsappNotifications": true
+      },
+      "user": {
+        "email": "admin@acmetech.com.br",
+        "name": "Admin Acme",
+        "password": "123456*",
+        "role": "COMPANY_ADMIN"
+      },
+      "employees": [
+        {
+          "user": {
+            "email": "joao.silva@acmetech.com.br",
+            "name": "João da Silva",
+            "password": "123456*",
+            "role": "EMPLOYEE"
+          },
+          "employee": {
+            "registrationId": "REG001",
+            "cpf": "12345878909",
+            "hireDate": "2024-01-15",
+            "baseSalary": "5200.00",
+            "position": "Desenvolvedor",
+            "department": "Tecnologia",
+            "active": true
+          },
+          "address": {
+            "zipCode": "06454-000",
+            "street": "Alameda Rio Negro",
+            "number": "585",
+            "complement": "Sala 504",
+            "district": "Alphaville",
+            "city": "Barueri",
+            "state": "SP",
+            "reference": "Próximo ao Centro Comercial"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(11) 99111-2222",
+            "allowWhatsappNotifications": true
+          },
+          "avatarImage": "images/users/joao-silva.png"
+        },
+        {
+          "user": {
+            "email": "maria.souza@acmetech.com.br",
+            "name": "Maria Souza",
+            "password": "123456*",
+            "role": "HR"
+          },
+          "employee": {
+            "registrationId": "REG002",
+            "cpf": "98765432100",
+            "hireDate": "2023-11-10",
+            "baseSalary": "6300.00",
+            "position": "Analista de RH",
+            "department": "Recursos Humanos",
+            "active": true
+          },
+          "address": {
+            "zipCode": "04001-002",
+            "street": "Rua Afonso de Freitas",
+            "number": "327",
+            "district": "Paraíso",
+            "city": "São Paulo",
+            "state": "SP"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(11) 99222-3333",
+            "allowWhatsappNotifications": true
+          },
+          "avatarImage": "images/users/maria-souza.jpg"
+        },
+        {
+          "user": {
+            "email": "carlos.pereira@acmetech.com.br",
+            "name": "Carlos Pereira",
+            "password": "123456*",
+            "role": "MANAGER"
+          },
+          "employee": {
+            "registrationId": "REG003",
+            "cpf": "11122233344",
+            "hireDate": "2022-06-01",
+            "baseSalary": "8500.00",
+            "position": "Gerente de Projetos",
+            "department": "Tecnologia",
+            "active": true
+          },
+          "address": {
+            "zipCode": "30130-170",
+            "street": "Rua da Bahia",
+            "number": "900",
+            "district": "Centro",
+            "city": "Belo Horizonte",
+            "state": "MG"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(31) 98888-9999",
+            "allowWhatsappNotifications": true
+          },
+          "avatarImage": "images/users/carlos-pereira.png"
+        },
+        {
+          "user": {
+            "email": "ana.oliveira@acmetech.com.br",
+            "name": "Ana Oliveira",
+            "password": "123456*",
+            "role": "FINANCIAL"
+          },
+          "employee": {
+            "registrationId": "REG004",
+            "cpf": "55566677788",
+            "hireDate": "2023-03-20",
+            "baseSalary": "5800.00",
+            "position": "Analista Financeiro",
+            "department": "Financeiro",
+            "active": true
+          },
+          "address": {
+            "zipCode": "80010-110",
+            "street": "Avenida Sete de Setembro",
+            "number": "2775",
+            "district": "Centro",
+            "city": "Curitiba",
+            "state": "PR"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(41) 99777-8888",
+            "allowWhatsappNotifications": false
+          },
+          "avatarImage": "images/users/ana-oliveira.jpg"
+        },
+        {
+          "user": {
+            "email": "paulo.santos@acmetech.com.br",
+            "name": "Paulo Santos",
+            "password": "123456*",
+            "role": "EMPLOYEE"
+          },
+          "employee": {
+            "registrationId": "REG005",
+            "cpf": "99988877766",
+            "hireDate": "2024-05-10",
+            "baseSalary": "4800.00",
+            "position": "Suporte Técnico",
+            "department": "Operações",
+            "active": true
+          },
+          "address": {
+            "zipCode": "90510-001",
+            "street": "Avenida Goethe",
+            "number": "200",
+            "district": "Rio Branco",
+            "city": "Porto Alegre",
+            "state": "RS"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(51) 99666-7777",
+            "allowWhatsappNotifications": true
+          },
+          "avatarImage": "images/users/paulo-santos.png"
+        }
+      ]
+    }
+  ]
+}
