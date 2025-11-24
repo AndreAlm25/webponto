@@ -1,6 +1,6 @@
 "use client";
 
-// Página: Editar Geofence em /admin/[company]/geofences/[id]/edit
+// Página: Editar Cerca Geográfica em /admin/[company]/cercas-geograficas/[id]/edit
 // - Código em inglês; textos em português
 
 import React, { useEffect, useState } from 'react'
@@ -51,7 +51,7 @@ export default function EditGeofencePage() {
         radiusMeters: radius,
       })
       alert('Geofence atualizada!')
-      router.push(`/admin/${encodeURIComponent(companyParam)}/geofences`)
+      router.push(`/admin/${encodeURIComponent(companyParam)}/cercas-geograficas`)
     } catch (e: any) {
       alert(`Erro ao salvar: ${e?.message || 'erro'}`)
     } finally {

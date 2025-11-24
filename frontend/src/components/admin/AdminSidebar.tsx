@@ -2,16 +2,20 @@
 // Sidebar do Admin (código em inglês; textos em português)
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText } from 'lucide-react'
+import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams<{ company?: string }>()
   const company = String(params?.company || '')
-  const [expandedMenus, setExpandedMenus] = React.useState<string[]>(['gestao'])
+  const { user } = useAuth()
+  const [expandedMenus, setExpandedMenus] = React.useState<string[]>([])
   const [dropdownOpen, setDropdownOpen] = React.useState(false)
+  const [activeDropdown, setActiveDropdown] = React.useState<string | null>(null)
   const [dropdownPosition, setDropdownPosition] = React.useState({ top: 0, left: 0 })
+  const [overtimePending, setOvertimePending] = React.useState(0)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
 
@@ -30,7 +34,7 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
     )
   }
   
-  const handleDropdownClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleDropdownClick = (e: React.MouseEvent<HTMLButtonElement>, menuId: string = 'gestao') => {
     if (!collapsed) return
     
     const rect = e.currentTarget.getBoundingClientRect()
@@ -38,6 +42,7 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
       top: rect.top,
       left: rect.right + 8
     })
+    setActiveDropdown(menuId)
     setDropdownOpen(!dropdownOpen)
   }
   
@@ -58,6 +63,34 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [dropdownOpen])
+
+  // Buscar contador de horas extras pendentes
+  React.useEffect(() => {
+    const fetchOvertimePending = async () => {
+      if (!user?.companyId) return
+      
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) return
+
+        const api = process.env.NEXT_PUBLIC_API_URL
+        const res = await fetch(`${api}/api/overtime/stats?companyId=${user.companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setOvertimePending(data.pending || 0)
+        }
+      } catch (error) {
+        console.error('Erro ao buscar pendentes:', error)
+      }
+    }
+
+    fetchOvertimePending()
+    // Atualizar a cada 30 segundos
+    const interval = setInterval(fetchOvertimePending, 30000)
+    return () => clearInterval(interval)
+  }, [user?.companyId])
   
   const isActive = (href: string) => pathname === href
   const isMenuExpanded = (menuId: string) => expandedMenus.includes(menuId) && !collapsed
@@ -75,6 +108,106 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
           <LayoutDashboard className={`${iconSize}`} />
           <span className={`${labelClass}`}>Dashboard</span>
         </button>
+
+        {/* Análises */}
+        <div className="relative">
+          <button
+            onClick={(e) => {
+              if (collapsed) {
+                handleDropdownClick(e, 'analises')
+              } else {
+                toggleMenu('analises')
+              }
+            }}
+            className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${itemClass}`}
+          >
+            <TrendingUp className={`${iconSize}`} />
+            <span className={`${labelClass} flex-1 text-left`}>Análises</span>
+            {!collapsed && (
+              isMenuExpanded('analises') 
+                ? <ChevronDown className="h-4 w-4" />
+                : <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+          
+          {/* Submenu normal (sidebar aberta) */}
+          {isMenuExpanded('analises') && !collapsed && (
+            <div className="ml-6 border-l border-border space-y-1">
+              <button
+                onClick={() => router.push(`${base}/analises/hora-extra`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/analises/hora-extra`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <ClockIcon className="h-3 w-3 mr-2" />
+                <div className="flex items-center justify-between flex-1">
+                  <span>Hora Extra</span>
+                  {overtimePending > 0 && (
+                    <span className="bg-yellow-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                      {overtimePending}
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                onClick={() => router.push(`${base}/analises/conformidade-clt`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/analises/conformidade-clt`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Scale className="h-3 w-3 mr-2" />
+                <span>Conformidade CLT</span>
+              </button>
+            </div>
+          )}
+
+          {/* Dropdown (sidebar colapsada) */}
+          {collapsed && dropdownOpen && activeDropdown === 'analises' && (
+            <div 
+              ref={dropdownRef}
+              className="fixed z-[100] min-w-[220px] bg-card border border-border rounded-lg shadow-2xl py-2"
+              style={{ 
+                top: `${dropdownPosition.top}px`,
+                left: `${dropdownPosition.left}px`
+              }}
+            >
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">
+                Análises
+              </div>
+              <button
+                onClick={() => {
+                  router.push(`${base}/analises/hora-extra`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/analises/hora-extra`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <ClockIcon className="h-4 w-4 mr-2" />
+                <div className="flex items-center justify-between flex-1">
+                  <span>Hora Extra</span>
+                  {overtimePending > 0 && (
+                    <span className="bg-yellow-500 text-white text-xs font-bold px-2 py-0.5 rounded-full ml-2">
+                      {overtimePending}
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  router.push(`${base}/analises/conformidade-clt`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/analises/conformidade-clt`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Scale className="h-4 w-4 mr-2" />
+                <span>Conformidade CLT</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Gestão de Colaboradores */}
         <div className="relative">
@@ -137,11 +270,29 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 <FileText className="h-3 w-3 mr-2" />
                 <span>Folha de Pagamento</span>
               </button>
+              <button
+                onClick={() => router.push(`${base}/terminal`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/terminal`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Clock className="h-3 w-3 mr-2" />
+                <span>Terminal de Ponto</span>
+              </button>
+              <button
+                onClick={() => router.push(`${base}/cercas-geograficas`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/cercas-geograficas`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <MapPin className="h-3 w-3 mr-2" />
+                <span>Cercas Geográficas</span>
+              </button>
             </div>
           )}
           
           {/* Dropdown (sidebar colapsada) - por cima de tudo */}
-          {collapsed && dropdownOpen && (
+          {collapsed && dropdownOpen && activeDropdown === 'gestao' && (
             <div 
               ref={dropdownRef}
               className="fixed z-[100] min-w-[220px] bg-card border border-border rounded-lg shadow-2xl py-2"
@@ -201,42 +352,109 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 <FileText className="h-4 w-4 mr-2" />
                 <span>Folha de Pagamento</span>
               </button>
+              <button
+                onClick={() => {
+                  router.push(`${base}/terminal`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/terminal`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                <span>Terminal de Ponto</span>
+              </button>
+              <button
+                onClick={() => {
+                  router.push(`${base}/cercas-geograficas`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/cercas-geograficas`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <MapPin className="h-4 w-4 mr-2" />
+                <span>Cercas Geográficas</span>
+              </button>
             </div>
           )}
         </div>
 
-        {/* Terminal de Ponto */}
+        {/* Alertas */}
         <button
-          onClick={() => router.push(`${base}/terminal`)}
+          onClick={() => router.push(`${base}/alertas`)}
           className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${itemClass} ${
-            isActive(`${base}/terminal`) ? 'bg-muted/50 font-medium' : ''
+            isActive(`${base}/alertas`) ? 'bg-muted/50 font-medium' : ''
           }`}
         >
-          <Clock className={`${iconSize}`} />
-          <span className={`${labelClass}`}>Terminal de Ponto</span>
+          <Bell className={`${iconSize}`} />
+          <span className={`${labelClass} flex-1 text-left`}>Alertas</span>
         </button>
 
-        {/* Cercas geográficas */}
-        <button
-          onClick={() => router.push(`${base}/geofences`)}
-          className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${itemClass} ${
-            isActive(`${base}/geofences`) ? 'bg-muted/50 font-medium' : ''
-          }`}
-        >
-          <MapPin className={`${iconSize}`} />
-          <span className={`${labelClass}`}>Cercas Geográficas</span>
-        </button>
+        {/* Configurações (Menu Expansível) */}
+        <div className="relative">
+          <button
+            onClick={(e) => {
+              if (collapsed) {
+                handleDropdownClick(e, 'config')
+              } else {
+                toggleMenu('configuracoes')
+              }
+            }}
+            className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${itemClass}`}
+          >
+            <Settings className={`${iconSize}`} />
+            <span className={`${labelClass} flex-1 text-left`}>Config. da Empresa</span>
+            {!collapsed && (
+              isMenuExpanded('configuracoes') ? 
+                <ChevronDown className="h-4 w-4" /> : 
+                <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
 
-        {/* Configurações */}
-        <button
-          onClick={() => router.push(`${base}/configuracoes`)}
-          className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${itemClass} ${
-            isActive(`${base}/configuracoes`) ? 'bg-muted/50 font-medium' : ''
-          }`}
-        >
-          <Settings className={`${iconSize}`} />
-          <span className={`${labelClass}`}>Config. da Empresa</span>
-        </button>
+          {/* Submenu normal (sidebar aberta) */}
+          {isMenuExpanded('configuracoes') && !collapsed && (
+            <div className="ml-6 border-l border-border space-y-1">
+              <button
+                onClick={() => router.push(`${base}/configuracoes/conformidade`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Scale className="h-3 w-3 mr-2" />
+                <span>Conformidade CLT</span>
+              </button>
+            </div>
+          )}
+
+          {/* Dropdown (sidebar colapsada) - por cima de tudo */}
+          {collapsed && dropdownOpen && activeDropdown === 'config' && (
+            <div 
+              ref={dropdownRef}
+              className="fixed z-[100] min-w-[220px] bg-card border border-border rounded-lg shadow-2xl py-2"
+              style={{ 
+                top: `${dropdownPosition.top}px`,
+                left: `${dropdownPosition.left}px`
+              }}
+            >
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">
+                Config. da Empresa
+              </div>
+              <button
+                onClick={() => {
+                  router.push(`${base}/configuracoes/conformidade`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Scale className="h-4 w-4 mr-2" />
+                <span>Conformidade CLT</span>
+              </button>
+            </div>
+          )}
+        </div>
       </nav>
     </aside>
   )

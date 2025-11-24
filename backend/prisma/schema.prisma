@@ -30,11 +30,24 @@ model Company {
   requireLiveness          Boolean         @default(false)
   workingHoursStart        String          @default("08:00")
   workingHoursEnd          String          @default("18:00")
-  timezone                 String?
-  toleranceEntryAfterMin   Int?
-  toleranceExitAfterMin    Int?
-  stripeCustomerId         String?
+  timezone                    String?
+  toleranceEntryAfterMin      Int?
+  toleranceExitAfterMin       Int?
+  enableTolerances            Boolean         @default(true)
+  earlyEntryToleranceMinutes  Int             @default(10)
+  lateExitToleranceMinutes    Int             @default(15)
+  lateArrivalToleranceMinutes Int             @default(15)
+  stripeCustomerId            String?
   stripeSubscriptionId     String?
+  complianceLevel          ComplianceLevel @default(FULL)
+  enforceWorkHours         Boolean         @default(true)
+  enforceRestPeriod        Boolean         @default(true)
+  enforceOvertimeRules     Boolean         @default(true)
+  enforceTimeBankRules     Boolean         @default(true)
+  allowNegativeBalance     Boolean         @default(false)
+  customOvertimeRate       Decimal?        @default(1.5)
+  customHolidayRate        Decimal?        @default(2.0)
+  warnOnViolation          Boolean         @default(true)
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
   address                  Address?        @relation("CompanyAddress")
@@ -95,6 +108,18 @@ model Employee {
   workEndTime            String          @default("18:00")
   breakStartTime         String?
   breakEndTime           String?
+  allowOvertime          Boolean         @default(false) // Permite hora extra
+  allowOvertimeBefore    Boolean         @default(false) // Permite hora extra ANTES
+  maxOvertimeBefore      Int?                            // Máximo em minutos ANTES
+  allowOvertimeAfter     Boolean         @default(false) // Permite hora extra DEPOIS
+  maxOvertimeAfter       Int?                            // Máximo em minutos DEPOIS
+  overtimeRate           Decimal?        @db.Decimal(3, 2) // Taxa de hora extra (ex: 1.5 = 50% a mais)
+  weekendRate            Decimal?        @db.Decimal(3, 2) // Taxa fim de semana (ex: 2.0 = 100% a mais)
+  holidayRate            Decimal?        @db.Decimal(3, 2) // Taxa feriado (ex: 2.0 = 100% a mais)
+  nightShiftRate         Decimal?        @db.Decimal(3, 2) // Taxa noturno (ex: 1.2 = 20% a mais)
+  allowTimeBank          Boolean         @default(false) // Usa banco de horas (compensa em folga)
+  minRestHours           Int             @default(11)    // Mínimo de descanso entre jornadas
+  warnOnRestViolation    Boolean         @default(true)  // Alertar se violar descanso
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
   geofenceId             String?         @db.Uuid
@@ -143,6 +168,20 @@ model TimeEntry {
   geofenceId          String?         @db.Uuid
   synchronized        Boolean         @default(true)
   status              TimeEntryStatus @default(VALID)
+  isOvertime          Boolean         @default(false)    // É hora extra?
+  overtimeStatus      OvertimeStatus? // Status da hora extra
+  overtimeMinutes     Int?            // Minutos de hora extra
+  overtimeType        OvertimeType?   // Tipo de hora extra
+  overtimeRate        Decimal?        @db.Decimal(3, 2) // Taxa aplicada (ex: 1.5)
+  overtimeValue       Decimal?        @db.Decimal(10, 2) // Valor em R$ da hora extra
+  overtimeApprovedBy  String?         @db.Uuid // ID do gestor que aprovou
+  overtimeApprovedAt  DateTime?       // Data da aprovação
+  overtimeNotes       String?         // Observações sobre a hora extra
+  exceedsLimit        Boolean         @default(false)    // Excedeu limite configurado
+  isLate              Boolean         @default(false)    // Funcionário atrasou
+  lateMinutes         Int?            // Minutos de atraso (após tolerância)
+  violatesRest        Boolean         @default(false)    // Violou descanso mínimo
+  restHours           Float?          // Horas de descanso que teve
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   company             Company         @relation(fields: [companyId], references: [id])
@@ -369,6 +408,12 @@ enum CompanyStatus {
   CANCELLED
 }
 
+enum ComplianceLevel {
+  FULL        // Rígido: 100% CLT, bloqueia violações
+  FLEXIBLE    // Flexível: sem validações
+  CUSTOM      // Customizado: admin escolhe regras
+}
+
 enum NotificationType {
   TIMECLOCK
   SYSTEM
@@ -402,4 +447,16 @@ enum ThreadStatus {
 enum MessageType {
   TEXT
   FILE
+}
+
+enum OvertimeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OvertimeType {
+  BEFORE    // Antes do expediente
+  AFTER     // Depois do expediente
+  HOLIDAY   // Feriado/DSR
 }

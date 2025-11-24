@@ -3,7 +3,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ComprefaceService } from '../../common/compreface.service';
 import { MinioService } from '../../common/minio.service';
 import { EventsGateway } from '../../events/events.gateway';
-import { TimeEntryType, TimeEntryStatus, GeofenceStatus, GeofencePolicy } from '@prisma/client';
+import { ComplianceService } from '../compliance/compliance.service';
+import { TimeEntryType, TimeEntryStatus, GeofenceStatus, GeofencePolicy, OvertimeStatus, OvertimeType } from '@prisma/client';
 import { startOfDay, endOfDay } from 'date-fns';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class TimeEntriesService {
     private compreface: ComprefaceService,
     private minio: MinioService,
     private eventsGateway: EventsGateway,
+    private complianceService: ComplianceService,
   ) {}
 
   /**
@@ -90,12 +92,40 @@ export class TimeEntriesService {
         method: 'FACIAL',
       });
 
-      // 7. Register time entry in database
+      // 7. Detectar hora extra, atraso e violações
+      const timestamp = new Date();
+      const detectionData = await this.detectOvertimeAndViolations(employee.id, timestamp, tipoPonto);
+
+      // 8. Validar conformidade CLT
+      const complianceValidation = await this.complianceService.validateTimeEntry(
+        companyId,
+        employee.id,
+        timestamp,
+        tipoPonto,
+        detectionData.overtimeMinutes,
+      );
+
+      // Se não permitido (bloqueado), lançar erro
+      if (!complianceValidation.allowed) {
+        this.logger.error(`🚫 [COMPLIANCE] Registro bloqueado por violação CLT`);
+        throw new BadRequestException({
+          message: 'Registro de ponto bloqueado por violação das regras CLT',
+          violations: complianceValidation.violations,
+          type: 'COMPLIANCE_VIOLATION',
+        });
+      }
+
+      // Se tem avisos, logar
+      if (complianceValidation.shouldWarn && complianceValidation.violations.length > 0) {
+        this.logger.warn(`⚠️ [COMPLIANCE] Violações detectadas: ${complianceValidation.violations.join(', ')}`);
+      }
+
+      // 9. Register time entry in database
       const timeEntry = await this.prisma.timeEntry.create({
         data: {
           companyId,
           employeeId: employee.id,
-          timestamp: new Date(),
+          timestamp,
           type: tipoPonto,
           method: 'FACIAL_RECOGNITION',
           photoUrl: fotoPath,
@@ -113,6 +143,20 @@ export class TimeEntriesService {
           livenessValid: String(meta?.livenessValid) === 'true',
           synchronized: true,
           status: TimeEntryStatus.VALID,
+          // Hora extra
+          isOvertime: detectionData.isOvertime,
+          overtimeStatus: detectionData.overtimeStatus,
+          overtimeMinutes: detectionData.overtimeMinutes,
+          overtimeType: detectionData.overtimeType,
+          overtimeRate: detectionData.overtimeRate,
+          overtimeValue: detectionData.overtimeValue,
+          exceedsLimit: detectionData.exceedsLimit || false,
+          // Atraso
+          isLate: detectionData.isLate || false,
+          lateMinutes: detectionData.lateMinutes,
+          // Violação de descanso
+          violatesRest: detectionData.violatesRest || false,
+          restHours: detectionData.restHours,
         },
         include: {
           employee: {
@@ -178,11 +222,15 @@ export class TimeEntriesService {
       notes: input.notes,
     })
 
+    // Detectar hora extra, atraso e violações
+    const timestamp = new Date();
+    const detectionData = await this.detectOvertimeAndViolations(input.employeeId, timestamp, input.type);
+
     const timeEntry = await this.prisma.timeEntry.create({
       data: {
         companyId: input.companyId,
         employeeId: input.employeeId,
-        timestamp: new Date(),
+        timestamp,
         type: input.type,
         method: 'MANUAL' as any,
         latitude: input.latitude,
@@ -196,6 +244,20 @@ export class TimeEntriesService {
         geofenceStatus,
         synchronized: true,
         status: TimeEntryStatus.VALID,
+        // Hora extra
+        isOvertime: detectionData.isOvertime,
+        overtimeStatus: detectionData.overtimeStatus,
+        overtimeMinutes: detectionData.overtimeMinutes,
+        overtimeType: detectionData.overtimeType,
+        overtimeRate: detectionData.overtimeRate,
+        overtimeValue: detectionData.overtimeValue,
+        exceedsLimit: detectionData.exceedsLimit || false,
+        // Atraso
+        isLate: detectionData.isLate || false,
+        lateMinutes: detectionData.lateMinutes,
+        // Violação de descanso
+        violatesRest: detectionData.violatesRest || false,
+        restHours: detectionData.restHours,
       },
       include: {
         employee: { select: { id: true, registrationId: true } },
@@ -440,6 +502,189 @@ export class TimeEntriesService {
       this.logger.error(`🔥 [CADASTRO] Stack: ${error.stack}`);
       throw error;
     }
+  }
+
+  /**
+   * Detectar e calcular hora extra, atraso e violação de descanso
+   * Retorna dados completos para TimeEntry
+   */
+  private async detectOvertimeAndViolations(
+    employeeId: string,
+    timestamp: Date,
+    type: TimeEntryType
+  ): Promise<{
+    isOvertime: boolean
+    overtimeStatus?: OvertimeStatus
+    overtimeMinutes?: number
+    overtimeType?: OvertimeType
+    overtimeRate?: number
+    overtimeValue?: number
+    exceedsLimit?: boolean
+    isLate?: boolean
+    lateMinutes?: number
+    violatesRest?: boolean
+    restHours?: number
+  }> {
+    // Buscar funcionário com todas as configurações
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        allowOvertime: true,
+        allowOvertimeBefore: true,
+        maxOvertimeBefore: true,
+        allowOvertimeAfter: true,
+        maxOvertimeAfter: true,
+        workStartTime: true,
+        workEndTime: true,
+        minRestHours: true,
+        warnOnRestViolation: true,
+        companyId: true,
+      },
+    });
+
+    if (!employee) {
+      return { isOvertime: false };
+    }
+
+    // Buscar tolerâncias da empresa
+    const company = await this.prisma.company.findUnique({
+      where: { id: employee.companyId },
+      select: {
+        lateArrivalToleranceMinutes: true,
+      },
+    });
+
+    const hour = timestamp.getHours();
+    const minute = timestamp.getMinutes();
+    const currentMinutes = hour * 60 + minute;
+
+    // Converter horários de trabalho para minutos
+    const [startHour, startMin] = employee.workStartTime.split(':').map(Number);
+    const [endHour, endMin] = employee.workEndTime.split(':').map(Number);
+    const workStartMinutes = startHour * 60 + startMin;
+    const workEndMinutes = endHour * 60 + endMin;
+
+    const result: any = {
+      isOvertime: false,
+      isLate: false,
+      violatesRest: false,
+    };
+
+    // ========================================
+    // 1. VERIFICAR VIOLAÇÃO DE DESCANSO (11h)
+    // ========================================
+    if (type === TimeEntryType.CLOCK_IN && employee.warnOnRestViolation) {
+      const lastEntry = await this.prisma.timeEntry.findFirst({
+        where: {
+          employeeId,
+          type: TimeEntryType.CLOCK_OUT,
+          timestamp: { lt: timestamp },
+        },
+        orderBy: { timestamp: 'desc' },
+      });
+
+      if (lastEntry) {
+        const diffMs = timestamp.getTime() - lastEntry.timestamp.getTime();
+        const restHours = diffMs / (1000 * 60 * 60);
+        
+        if (restHours < employee.minRestHours) {
+          result.violatesRest = true;
+          result.restHours = restHours;
+          this.logger.warn(
+            `⚠️ [DESCANSO] Funcionário teve apenas ${restHours.toFixed(1)}h de descanso (mínimo: ${employee.minRestHours}h)`
+          );
+        }
+      }
+    }
+
+    // ========================================
+    // 2. DETECTAR ATRASO (CLOCK_IN)
+    // ========================================
+    if (type === TimeEntryType.CLOCK_IN) {
+      const minutesLate = currentMinutes - workStartMinutes;
+      const lateTolerance = company?.lateArrivalToleranceMinutes || 15;
+
+      if (minutesLate > lateTolerance) {
+        result.isLate = true;
+        result.lateMinutes = minutesLate - lateTolerance;
+        this.logger.log(
+          `⏰ [ATRASO] Detectado: ${result.lateMinutes}min (tolerância: ${lateTolerance}min)`
+        );
+      }
+    }
+
+    // ========================================
+    // 3. DETECTAR HORA EXTRA
+    // ========================================
+    if (!employee.allowOvertime) {
+      return result;
+    }
+
+    // HORA EXTRA ANTES (CLOCK_IN)
+    if (type === TimeEntryType.CLOCK_IN && employee.allowOvertimeBefore) {
+      const minutesBefore = workStartMinutes - currentMinutes;
+      
+      if (minutesBefore > 0) {
+        const overtimeMinutes = minutesBefore;
+        const maxAllowed = employee.maxOvertimeBefore || 120;
+        
+        result.isOvertime = true;
+        result.overtimeMinutes = overtimeMinutes;
+        result.overtimeType = OvertimeType.BEFORE;
+        result.overtimeStatus = OvertimeStatus.PENDING;
+        result.exceedsLimit = overtimeMinutes > maxAllowed;
+
+        this.logger.log(
+          `⏰ [HORA EXTRA ANTES] ${overtimeMinutes}min (limite: ${maxAllowed}min) ${result.exceedsLimit ? '⚠️ EXCEDEU!' : '✅'}`
+        );
+      }
+    }
+
+    // HORA EXTRA DEPOIS (CLOCK_OUT)
+    if (type === TimeEntryType.CLOCK_OUT && employee.allowOvertimeAfter) {
+      const minutesAfter = currentMinutes - workEndMinutes;
+      
+      if (minutesAfter > 0) {
+        const overtimeMinutes = minutesAfter;
+        const maxAllowed = employee.maxOvertimeAfter || 120;
+        
+        result.isOvertime = true;
+        result.overtimeMinutes = overtimeMinutes;
+        result.overtimeType = OvertimeType.AFTER;
+        result.overtimeStatus = OvertimeStatus.PENDING;
+        result.exceedsLimit = overtimeMinutes > maxAllowed;
+
+        this.logger.log(
+          `⏰ [HORA EXTRA DEPOIS] ${overtimeMinutes}min (limite: ${maxAllowed}min) ${result.exceedsLimit ? '⚠️ EXCEDEU!' : '✅'}`
+        );
+      }
+    }
+
+    // ========================================
+    // 4. CALCULAR VALOR DA HORA EXTRA (se houver)
+    // ========================================
+    if (result.isOvertime && result.overtimeMinutes) {
+      try {
+        const overtimeCalc = await this.complianceService.calculateOvertimeValue(
+          employeeId,
+          result.overtimeMinutes,
+          timestamp,
+          result.overtimeType,
+        );
+
+        result.overtimeRate = overtimeCalc.rate;
+        result.overtimeValue = overtimeCalc.value;
+
+        this.logger.log(
+          `💰 [VALOR] Hora extra: ${result.overtimeMinutes}min × R$ ${overtimeCalc.hourlyRate.toFixed(2)}/h × ${overtimeCalc.rate}x = R$ ${overtimeCalc.value.toFixed(2)}`
+        );
+      } catch (error) {
+        this.logger.error(`❌ [VALOR] Erro ao calcular valor da hora extra: ${error.message}`);
+        // Não bloqueia o registro se falhar o cálculo
+      }
+    }
+
+    return result;
   }
 
   /**

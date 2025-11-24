@@ -5,7 +5,7 @@
 // - Atualiza via PUT /api/employees/:id
 
 import { useState, useEffect } from 'react'
-import { X, User, Mail, Phone, Briefcase, Building, DollarSign, Calendar, Timer, Clock, MapPin, Hash, Scan, Eye } from 'lucide-react'
+import { X, User, Mail, Phone, Briefcase, Building, DollarSign, Calendar, Timer, Clock, MapPin, Hash, Scan, Eye, ClockAlert, Hourglass } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { InputWithIcon } from '@/components/ui/input-with-icon'
@@ -48,6 +48,16 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
     allowFacialRecognition: false,
     requireLiveness: false,
     geofenceId: '',
+    lateToleranceMinutes: 15,
+    allowOvertime: false,
+    allowOvertimeBefore: false,
+    maxOvertimeBefore: 120,
+    allowOvertimeAfter: false,
+    maxOvertimeAfter: 180,
+    toleranceMinutes: 10,
+    allowTimeBank: false,
+    minRestHours: 11,
+    warnOnRestViolation: true,
   })
   
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -127,6 +137,16 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
         allowFacialRecognition: employee.allowFacialRecognition || false,
         requireLiveness: employee.requireLiveness || false,
         geofenceId: employee.geofenceId || '',
+        lateToleranceMinutes: employee.lateToleranceMinutes || 15,
+        allowOvertime: employee.allowOvertime || false,
+        allowOvertimeBefore: employee.allowOvertimeBefore || false,
+        maxOvertimeBefore: employee.maxOvertimeBefore || 120,
+        allowOvertimeAfter: employee.allowOvertimeAfter || false,
+        maxOvertimeAfter: employee.maxOvertimeAfter || 180,
+        toleranceMinutes: employee.toleranceMinutes || 10,
+        allowTimeBank: employee.allowTimeBank || false,
+        minRestHours: employee.minRestHours || 11,
+        warnOnRestViolation: employee.warnOnRestViolation !== false,
       }
 
       setFormData(initialFormData)
@@ -329,6 +349,16 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
         allowRemoteClockIn: formData.allowRemoteClockIn,
         allowFacialRecognition: formData.allowFacialRecognition,
         requireLiveness: formData.requireLiveness,
+        lateToleranceMinutes: formData.lateToleranceMinutes,
+        allowOvertime: formData.allowOvertime,
+        allowOvertimeBefore: formData.allowOvertimeBefore,
+        maxOvertimeBefore: formData.maxOvertimeBefore,
+        allowOvertimeAfter: formData.allowOvertimeAfter,
+        maxOvertimeAfter: formData.maxOvertimeAfter,
+        toleranceMinutes: formData.toleranceMinutes,
+        allowTimeBank: formData.allowTimeBank,
+        minRestHours: formData.minRestHours,
+        warnOnRestViolation: formData.warnOnRestViolation,
       }
       
       const res = await fetch(`${api}/api/employees/${employeeId}`, {
@@ -605,6 +635,27 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
                       />
                     </div>
                   )}
+
+                  {/* Tolerância de Atraso */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <InputWithIcon
+                      id="lateToleranceMinutes"
+                      name="lateToleranceMinutes"
+                      type="number"
+                      min="0"
+                      max="60"
+                      icon={<Clock className="h-4 w-4" />}
+                      label="Tolerância de Atraso (minutos)"
+                      placeholder="15"
+                      value={formData.lateToleranceMinutes}
+                      onChange={handleChange}
+                    />
+                    <div className="flex items-end">
+                      <p className="text-xs text-muted-foreground">
+                        CLT recomenda até 10 minutos. Padrão: 15 minutos.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Permissões e Configurações */}
@@ -614,16 +665,55 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
                   </h3>
 
                   <div className="space-y-3">
+                    {/* Permitir Ponto Remoto */}
                     <CheckboxWithIcon
                       icon={<MapPin className="h-4 w-4" />}
                       label="Permitir Ponto Remoto"
-                      description="Funcionário pode bater ponto pelo painel (use cerca geográfica para restringir localização)"
+                      description="Funcionário pode bater ponto pelo painel"
                       checked={formData.allowRemoteClockIn}
                       onCheckedChange={(checked) => 
                         setFormData(prev => ({ ...prev, allowRemoteClockIn: checked as boolean }))
                       }
                     />
 
+                    {/* Submenu: Cerca Geográfica */}
+                    {formData.allowRemoteClockIn && (
+                      <div className="space-y-3 pl-8 border-l-2 border-primary/20">
+                        <CheckboxWithIcon
+                          icon={<MapPin className="h-4 w-4" />}
+                          label="Exigir Cerca Geográfica"
+                          description="Restringir ponto remoto a locais específicos"
+                          checked={formData.requireGeofence}
+                          onCheckedChange={(checked) => 
+                            setFormData(prev => ({ ...prev, requireGeofence: checked as boolean }))
+                          }
+                        />
+                        
+                        {formData.requireGeofence && (
+                          <div className="space-y-2">
+                            <Label className="text-sm">Selecionar Cerca</Label>
+                            <Select
+                              value={formData.geofenceId || 'none'}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, geofenceId: value === 'none' ? '' : value }))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione uma cerca" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Nenhuma</SelectItem>
+                                {geofences.map((gf) => (
+                                  <SelectItem key={gf.id} value={gf.id}>
+                                    {gf.name} {gf.radiusMeters && `(${gf.radiusMeters}m)`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Reconhecimento Facial */}
                     <CheckboxWithIcon
                       icon={<Scan className="h-4 w-4" />}
                       label="Reconhecimento Facial"
@@ -634,48 +724,146 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
                       }
                     />
 
+                    {/* Submenu: Detecção de Vivacidade */}
                     {formData.allowFacialRecognition && (
-                      <CheckboxWithIcon
-                        icon={<Eye className="h-4 w-4" />}
-                        label="Detecção de Vivacidade"
-                        description="Exigir prova de vida no reconhecimento facial"
-                        checked={formData.requireLiveness}
-                        onCheckedChange={(checked) => 
-                          setFormData(prev => ({ ...prev, requireLiveness: checked as boolean }))
-                        }
-                      />
+                      <div className="space-y-2 pl-8 border-l-2 border-primary/20">
+                        <CheckboxWithIcon
+                          icon={<Eye className="h-4 w-4" />}
+                          label="Detecção de Vivacidade"
+                          description="Exigir prova de vida no reconhecimento facial"
+                          checked={formData.requireLiveness}
+                          onCheckedChange={(checked) => 
+                            setFormData(prev => ({ ...prev, requireLiveness: checked as boolean }))
+                          }
+                        />
+                      </div>
+                    )}
+
+                    <CheckboxWithIcon
+                      icon={<ClockAlert className="h-4 w-4" />}
+                      label="Permitir Hora Extra"
+                      description="Funcionário pode fazer hora extra (antes/depois do expediente)"
+                      checked={formData.allowOvertime}
+                      onCheckedChange={(checked) => 
+                        setFormData(prev => ({ ...prev, allowOvertime: checked as boolean }))
+                      }
+                    />
+
+                    {formData.allowOvertime && (
+                      <div className="space-y-4 pl-8 border-l-2 border-primary/20">
+                        {/* Hora Extra ANTES */}
+                        <div className="space-y-2">
+                          <CheckboxWithIcon
+                            icon={<Clock className="h-4 w-4" />}
+                            label="Permitir Hora Extra ANTES do expediente"
+                            description={`Funcionário pode entrar antes das ${formData.workStartTime}`}
+                            checked={formData.allowOvertimeBefore}
+                            onCheckedChange={(checked) => 
+                              setFormData(prev => ({ ...prev, allowOvertimeBefore: checked as boolean }))
+                            }
+                          />
+                          {formData.allowOvertimeBefore && (
+                            <div className="pl-8 space-y-2">
+                              <Label className="text-sm">Máximo permitido (minutos)</Label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="240"
+                                step="1"
+                                value={formData.maxOvertimeBefore}
+                                onChange={(e) => setFormData(prev => ({ ...prev, maxOvertimeBefore: parseInt(e.target.value) || 0 }))}
+                                className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                {Math.floor(formData.maxOvertimeBefore / 60)}h {formData.maxOvertimeBefore % 60}min = pode entrar às {(() => {
+                                  const [h, m] = formData.workStartTime.split(':').map(Number)
+                                  const totalMin = h * 60 + m - formData.maxOvertimeBefore
+                                  const newH = Math.floor(totalMin / 60)
+                                  const newM = totalMin % 60
+                                  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`
+                                })()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Hora Extra DEPOIS */}
+                        <div className="space-y-2">
+                          <CheckboxWithIcon
+                            icon={<Clock className="h-4 w-4" />}
+                            label="Permitir Hora Extra DEPOIS do expediente"
+                            description={`Funcionário pode sair depois das ${formData.workEndTime}`}
+                            checked={formData.allowOvertimeAfter}
+                            onCheckedChange={(checked) => 
+                              setFormData(prev => ({ ...prev, allowOvertimeAfter: checked as boolean }))
+                            }
+                          />
+                          {formData.allowOvertimeAfter && (
+                            <div className="pl-8 space-y-2">
+                              <Label className="text-sm">Máximo permitido (minutos)</Label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="240"
+                                step="1"
+                                value={formData.maxOvertimeAfter}
+                                onChange={(e) => setFormData(prev => ({ ...prev, maxOvertimeAfter: parseInt(e.target.value) || 0 }))}
+                                className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                {Math.floor(formData.maxOvertimeAfter / 60)}h {formData.maxOvertimeAfter % 60}min = pode sair até {(() => {
+                                  const [h, m] = formData.workEndTime.split(':').map(Number)
+                                  const totalMin = h * 60 + m + formData.maxOvertimeAfter
+                                  const newH = Math.floor(totalMin / 60) % 24
+                                  const newM = totalMin % 60
+                                  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`
+                                })()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Tolerância */}
+                        <div className="space-y-2">
+                          <Label className="text-sm">Tolerância para Hora Extra (minutos)</Label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="60"
+                            value={formData.toleranceMinutes}
+                            onChange={(e) => setFormData(prev => ({ ...prev, toleranceMinutes: parseInt(e.target.value) || 0 }))}
+                            className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Minutos dentro da tolerância não contam como hora extra (padrão: 10min)
+                          </p>
+                        </div>
+
+                        {/* Banco de Horas */}
+                        <CheckboxWithIcon
+                          icon={<Hourglass className="h-4 w-4" />}
+                          label="Usar Banco de Horas"
+                          description="Compensar hora extra com folga ao invés de pagamento em dinheiro"
+                          checked={formData.allowTimeBank}
+                          onCheckedChange={(checked) => 
+                            setFormData(prev => ({ ...prev, allowTimeBank: checked as boolean }))
+                          }
+                        />
+
+                        {/* Alerta CLT */}
+                        {(formData.maxOvertimeBefore / 60 + formData.maxOvertimeAfter / 60) > 2 && (
+                          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+                            <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                              ⚠️ <strong>Atenção:</strong> Total de {(formData.maxOvertimeBefore / 60 + formData.maxOvertimeAfter / 60).toFixed(1)}h extras/dia.
+                              CLT recomenda máximo 2h/dia (total 10h/dia). Risco de passivo trabalhista.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* Cerca Geográfica - Só aparece se permitir ponto remoto */}
-                {formData.allowRemoteClockIn && (
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
-                      Cerca Geográfica
-                    </Label>
-                    <Select
-                      value={formData.geofenceId || 'none'}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, geofenceId: value === 'none' ? '' : value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma cerca (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhuma</SelectItem>
-                        {geofences.map((gf) => (
-                          <SelectItem key={gf.id} value={gf.id}>
-                            {gf.name} {gf.radiusMeters && `(${gf.radiusMeters}m)`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Limita a área onde o funcionário pode bater ponto remotamente. Sem cerca, pode bater de qualquer localização.
-                    </p>
-                  </div>
-                )}
 
                 {/* Botões */}
                 <div className="flex gap-3 pt-4">

@@ -1,6 +1,6 @@
 "use client";
 
-// Página: Geofences (lista e criação) escopada por empresa na rota /admin/[company]/geofences
+// Página: Cercas Geográficas (lista e criação) escopada por empresa na rota /admin/[company]/cercas-geograficas
 // - Código em inglês; textos em português
 
 import React, { useEffect, useState } from 'react'
@@ -253,7 +253,7 @@ export default function GeofencesCompanyPage() {
 
   // Comentário: Exibe erro se slug da URL não corresponde ao slug do usuário
   if (slugMismatch) {
-    return <SlugMismatchError urlSlug={urlSlug} correctSlug={companySlug} currentPath={`/admin/${urlSlug}/geofences`} />
+    return <SlugMismatchError urlSlug={urlSlug} correctSlug={companySlug} currentPath={`/admin/${urlSlug}/cercas-geograficas`} />
   }
 
   return (

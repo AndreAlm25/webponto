@@ -6,9 +6,10 @@ import { ComprefaceService } from '../../common/compreface.service';
 import { MinioService } from '../../common/minio.service';
 import { ConfigModule } from '@nestjs/config';
 import { EventsModule } from '../../events/events.module';
+import { ComplianceModule } from '../compliance/compliance.module';
 
 @Module({
-  imports: [ConfigModule, EventsModule],
+  imports: [ConfigModule, EventsModule, ComplianceModule],
   controllers: [TimeEntriesController],
   providers: [
     TimeEntriesService,

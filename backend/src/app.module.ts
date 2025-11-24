@@ -12,6 +12,9 @@ import { PositionsModule } from './modules/positions/positions.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { EventsModule } from './events/events.module';
+import { OvertimeModule } from './modules/overtime/overtime.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
 
 @Module({
   imports: [
@@ -28,6 +31,9 @@ import { EventsModule } from './events/events.module';
     MessagesModule,
     GeofencesModule,
     GeocodingModule,
+    OvertimeModule,
+    AlertsModule,
+    ComplianceModule,
     SeedModule,
     FilesModule,
   ],

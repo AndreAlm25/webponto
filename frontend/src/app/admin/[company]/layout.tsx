@@ -6,7 +6,8 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import UserProfileMenu from '@/components/admin/UserProfileMenu'
 import AdminSidebar from '@/components/admin/AdminSidebar'
 import MessagesDropdown from '@/components/admin/MessagesDropdown'
-import { Bell, ChevronLeft, ChevronRight } from 'lucide-react'
+import AlertsDropdown from '@/components/admin/AlertsDropdown'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { getFileUrl } from '@/utils/files'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
@@ -95,13 +96,9 @@ export default function CompanyAdminLayout({
             {/* Dropdown de Mensagens */}
             <MessagesDropdown />
             
-            <button
-              type="button"
-              aria-label="Notificações"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              <Bell className="h-5 w-5" />
-            </button>
+            {/* Dropdown de Alertas */}
+            <AlertsDropdown />
+            
             <UserProfileMenu onEditProfile={() => { /* TODO: abrir página de perfil */ }} />
           </div>
         </div>
