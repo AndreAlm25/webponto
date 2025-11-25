@@ -39,7 +39,11 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
     alerts: 0,
   })
   const [loadingStats, setLoadingStats] = useState(true)
-  const { onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted } = useWebSocket()
+  const [dashboardConfig, setDashboardConfig] = useState({
+    showRecentEntries: true,
+    recentEntriesLimit: 10,
+  })
+  const { onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted, onDashboardConfigUpdated } = useWebSocket()
   
   // Log detalhado do slug da URL
   useEffect(() => {
@@ -158,7 +162,7 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
     
     try {
       const token = localStorage.getItem('token')
-      const url = `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&limit=10`
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&limit=${dashboardConfig.recentEntriesLimit}`
       console.log('📋 [Recentes] URL:', url)
       
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
@@ -170,7 +174,7 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
         console.log('📋 [Recentes] Dados recebidos:', data)
         console.log('📋 [Recentes] Total de registros:', Array.isArray(data) ? data.length : 0)
         
-        const entries = Array.isArray(data) ? data.slice(0, 10) : []
+        const entries = Array.isArray(data) ? data.slice(0, dashboardConfig.recentEntriesLimit) : []
         console.log('📋 [Recentes] Registros a exibir:', entries.length)
         
         // Log detalhado de cada registro
@@ -195,9 +199,38 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
     }
   }
   
+  // Carregar configurações do dashboard
   useEffect(() => {
-    fetchRecentEntries()
+    if (!companyId) return
+
+    const fetchDashboardConfig = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+        const res = await fetch(`${api}/api/dashboard-config?companyId=${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          setDashboardConfig({
+            showRecentEntries: data.dashboardShowRecentEntries,
+            recentEntriesLimit: data.dashboardRecentEntriesLimit,
+          })
+        }
+      } catch (error) {
+        console.error('Erro ao carregar configurações do dashboard:', error)
+      }
+    }
+
+    fetchDashboardConfig()
   }, [companyId])
+
+  useEffect(() => {
+    if (dashboardConfig.showRecentEntries) {
+      fetchRecentEntries()
+    }
+  }, [companyId, dashboardConfig.showRecentEntries, dashboardConfig.recentEntriesLimit])
 
   // WebSocket para atualização em tempo real usando context global
   useEffect(() => {
@@ -220,7 +253,7 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
       
       // Atualizar lista de registros recentes
       setRecentEntries(prev => {
-        const updated = [timeEntry, ...prev].slice(0, 10)
+        const updated = [timeEntry, ...prev].slice(0, dashboardConfig.recentEntriesLimit)
         console.log('🆕 [WebSocket Dashboard] Lista atualizada! Total:', updated.length)
         return updated
       })
@@ -245,6 +278,19 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
       fetchStats()
     })
 
+    // Registrar listener para configurações do dashboard atualizadas
+    const unsubscribeConfig = onDashboardConfigUpdated((config: any) => {
+      console.log('⚙️ [WebSocket Dashboard] Configuração atualizada:', config)
+      setDashboardConfig({
+        showRecentEntries: config.dashboardShowRecentEntries,
+        recentEntriesLimit: config.dashboardRecentEntriesLimit,
+      })
+      // Se mudou o limite, recarregar registros
+      if (config.dashboardRecentEntriesLimit !== dashboardConfig.recentEntriesLimit) {
+        fetchRecentEntries()
+      }
+    })
+
     console.log('✅ [WebSocket Dashboard] Listeners registrados com sucesso!')
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
@@ -254,8 +300,9 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
       unsubscribeCreated()
       unsubscribeUpdated()
       unsubscribeDeleted()
+      unsubscribeConfig()
     }
-  }, [companyId, onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted])
+  }, [companyId, onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted, onDashboardConfigUpdated, dashboardConfig.recentEntriesLimit])
 
   return (
     <>
@@ -271,9 +318,9 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${dashboardConfig.showRecentEntries ? 'lg:grid-cols-3' : ''}`}>
         {/* Cards principais - 2 colunas */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={`space-y-6 ${dashboardConfig.showRecentEntries ? 'lg:col-span-2' : ''}`}>
           {/* Grid de 6 cards (3x2) */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard 
@@ -322,15 +369,18 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
         </div>
 
         {/* Sidebar direita: registros recentes */}
-        <div className="space-y-4">
-          <div className="border border-border rounded-lg bg-card">
-            <div className="p-4 border-b border-border">
-              <h3 className="text-xl font-bold flex items-center gap-2">
-                <UserRound className="h-6 w-6" />
-                Registros recentes
-              </h3>
-              <p className="text-sm text-muted-foreground">Últimos registros de pontos</p>
-            </div>
+        {dashboardConfig.showRecentEntries && (
+          <div className="space-y-4">
+            <div className="border border-border rounded-lg bg-card">
+              <div className="p-4 border-b border-border">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <UserRound className="h-6 w-6" />
+                  Registros recentes
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Últimos {dashboardConfig.recentEntriesLimit} registros de pontos
+                </p>
+              </div>
             <div className="p-4 space-y-3">
               {loadingEntries ? (
                 <EmptyText>Carregando...</EmptyText>
@@ -418,6 +468,7 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
             </div>
           </div>
         </div>
+        )}
       </div>
     </>
   )

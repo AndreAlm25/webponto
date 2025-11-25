@@ -15,6 +15,7 @@ import { EventsModule } from './events/events.module';
 import { OvertimeModule } from './modules/overtime/overtime.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
+import { DashboardConfigModule } from './modules/dashboard-config/dashboard-config.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ComplianceModule } from './modules/compliance/compliance.module';
     OvertimeModule,
     AlertsModule,
     ComplianceModule,
+    DashboardConfigModule,
     SeedModule,
     FilesModule,
   ],

@@ -48,6 +48,8 @@ model Company {
   customOvertimeRate       Decimal?        @default(1.5)
   customHolidayRate        Decimal?        @default(2.0)
   warnOnViolation          Boolean         @default(true)
+  dashboardShowRecentEntries Boolean       @default(true)
+  dashboardRecentEntriesLimit Int          @default(10)
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
   address                  Address?        @relation("CompanyAddress")

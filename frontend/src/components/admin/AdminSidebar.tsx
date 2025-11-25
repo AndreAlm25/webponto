@@ -2,7 +2,7 @@
 // Sidebar do Admin (código em inglês; textos em português)
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp, List } from 'lucide-react'
+import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp, List, Monitor } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
@@ -437,6 +437,15 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
           {isMenuExpanded('configuracoes') && !collapsed && (
             <div className="ml-6 border-l border-border space-y-1">
               <button
+                onClick={() => router.push(`${base}/configuracoes/dashboard`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Monitor className="h-3 w-3 mr-2" />
+                <span>Dashboard</span>
+              </button>
+              <button
                 onClick={() => router.push(`${base}/configuracoes/conformidade`)}
                 className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
                   isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
@@ -461,6 +470,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">
                 Config. da Empresa
               </div>
+              <button
+                onClick={() => {
+                  router.push(`${base}/configuracoes/dashboard`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Monitor className="h-4 w-4 mr-2" />
+                <span>Dashboard</span>
+              </button>
               <button
                 onClick={() => {
                   router.push(`${base}/configuracoes/conformidade`)

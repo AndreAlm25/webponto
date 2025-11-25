@@ -12,14 +12,14 @@ interface PageHeaderProps {
   title: string
   description?: string
   icon?: React.ReactNode
-  breadcrumbs: BreadcrumbItem[]
+  breadcrumbs?: BreadcrumbItem[]
 }
 
 export default function PageHeader({ title, description, icon, breadcrumbs }: PageHeaderProps) {
   return (
     <div className="mb-6">
       {/* Breadcrumb */}
-      <Breadcrumb items={breadcrumbs} />
+      {breadcrumbs && <Breadcrumb items={breadcrumbs} />}
       
       {/* Título com ícone */}
       <div className="flex items-center gap-3">

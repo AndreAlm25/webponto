@@ -18,6 +18,12 @@ interface Employee {
   [key: string]: any
 }
 
+interface DashboardConfig {
+  id: string
+  dashboardShowRecentEntries: boolean
+  dashboardRecentEntriesLimit: number
+}
+
 interface WebSocketContextType {
   socket: Socket | null
   connected: boolean
@@ -30,6 +36,7 @@ interface WebSocketContextType {
   onEmployeeDeleted: (callback: (data: { id: string }) => void) => () => void
   onFaceRegistered: (callback: (data: { employeeId: string }) => void) => () => void
   onFaceDeleted: (callback: (data: { employeeId: string }) => void) => () => void
+  onDashboardConfigUpdated: (callback: (config: DashboardConfig) => void) => () => void
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null)
@@ -179,6 +186,13 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     [registerListener]
   )
 
+  const onDashboardConfigUpdated = useCallback(
+    (callback: (config: DashboardConfig) => void) => {
+      return registerListener('dashboard-config-updated', callback)
+    },
+    [registerListener]
+  )
+
   const value: WebSocketContextType = {
     socket,
     connected,
@@ -190,6 +204,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     onEmployeeDeleted,
     onFaceRegistered,
     onFaceDeleted,
+    onDashboardConfigUpdated,
   }
 
   return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>
