@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { useWebSocket } from '@/contexts/WebSocketContext'
-import EmployeeSettingsForm from './EmployeeSettingsForm'
+import { useAuth } from '@/contexts/AuthContext'
+import EditEmployeeModal from './EditEmployeeModal'
 import EmployeeActionsMenu from './EmployeeActionsMenu'
 import AvatarCircle from '@/components/facial/AvatarCircle'
+import FacialRecognitionFlow from '@/components/facial/FacialRecognitionFlow'
 import { Camera, MapPin, Timer } from 'lucide-react'
 
 export type Employee = {
@@ -18,6 +20,7 @@ export type Employee = {
   status?: 'ACTIVE' | 'INACTIVE' | 'TERMINATED'
   allowRemoteClockIn?: boolean
   allowFacialRecognition?: boolean
+  faceRegistered?: boolean
   requireLiveness?: boolean
   requireGeolocation?: boolean
   minGeoAccuracyMeters?: number | null
@@ -32,8 +35,11 @@ interface EmployeeListProps {
 export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditEmployee }: EmployeeListProps) {
   const [employees, setEmployees] = React.useState<Employee[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [editing, setEditing] = React.useState<Employee | null>(null)
+  const [editingEmployeeId, setEditingEmployeeId] = React.useState<string | null>(null)
+  const [showFacialCamera, setShowFacialCamera] = React.useState(false)
+  const [selectedEmployeeForFace, setSelectedEmployeeForFace] = React.useState<Employee | null>(null)
   const { onEmployeeCreated, onEmployeeUpdated, onEmployeeDeleted, connected } = useWebSocket()
+  const { user } = useAuth()
 
   const api = process.env.NEXT_PUBLIC_API_URL
 
@@ -58,7 +64,11 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.message || 'Falha ao carregar funcionários')
       const items: Employee[] = Array.isArray(data?.employees) ? data.employees : (Array.isArray(data) ? data : [])
-      console.log('[EmployeeList] GET /api/employees ->', Array.isArray(items) ? items.length : 0)
+      console.log('[DEBUG] Funcionários carregados:', items.map(e => ({
+        name: e.name,
+        allowFacialRecognition: e.allowFacialRecognition,
+        faceRegistered: e.faceRegistered
+      })))
       setEmployees(items)
     } catch (e: any) {
       toast.error(e?.message || 'Erro ao carregar funcionários')
@@ -73,10 +83,7 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
   React.useEffect(() => {
     if (!connected) return
 
-    console.log('[EmployeeList] 📡 Registrando listener para employee-created')
-
     const unsubscribe = onEmployeeCreated((employee) => {
-      console.log('[EmployeeList] 📥 Novo funcionário criado:', employee)
       load() // Recarregar lista
       toast.success('Novo funcionário adicionado!', {
         description: employee.user?.name || 'Funcionário'
@@ -90,34 +97,11 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
   React.useEffect(() => {
     if (!connected) return
 
-    console.log('[EmployeeList] 📡 Registrando listener para employee-updated')
-
     const unsubscribe = onEmployeeUpdated((employee) => {
-      console.log('[EmployeeList] 📥 Funcionário atualizado:', employee)
-      
-      // Atualizar na lista local
-      setEmployees(prev => {
-        const index = prev.findIndex(e => e.id === employee.id)
-        if (index === -1) {
-          // Se não existe, recarregar lista completa
-          load()
-          return prev
-        }
-        
-        // Atualizar item existente
-        const updated = [...prev]
-        updated[index] = {
-          ...updated[index],
-          ...employee,
-          name: employee.user?.name || updated[index].name,
-          email: employee.user?.email || updated[index].email,
-          photoUrl: employee.user?.avatarUrl || updated[index].photoUrl,
-        }
-        return updated
-      })
-
+      // Recarregar lista completa para garantir dados atualizados
+      load()
       toast.info('Funcionário atualizado', {
-        description: employee.user?.name || 'Dados atualizados'
+        description: employee.user?.name || 'Funcionário'
       })
     })
 
@@ -128,15 +112,12 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
   React.useEffect(() => {
     if (!connected) return
 
-    console.log('[EmployeeList] 📡 Registrando listener para employee-deleted')
-
     const unsubscribe = onEmployeeDeleted((data) => {
-      console.log('[EmployeeList] 📥 Funcionário deletado:', data)
-      
       // Remover da lista local
       setEmployees(prev => prev.filter(e => e.id !== data.id))
-      
-      toast.info('Funcionário removido')
+      toast.error('Funcionário removido', {
+        description: 'O funcionário foi excluído do sistema'
+      })
     })
 
     return unsubscribe
@@ -187,9 +168,51 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
     }
   }
 
-  function onSaved(updated: Employee) {
-    setEmployees(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e))
-    setEditing(null)
+  async function deleteFace(emp: Employee) {
+    try {
+      if (!api) return
+      const token = localStorage.getItem('token') || localStorage.getItem('employee_token') || undefined
+      const res = await fetch(`${api}/api/time-entries/facial/${emp.id}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.message || 'Falha ao excluir reconhecimento facial')
+      }
+      toast.success('Reconhecimento facial excluído com sucesso!')
+      // Recarregar lista completa para garantir dados atualizados
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao excluir reconhecimento facial')
+    }
+  }
+
+  function openFacialCamera(emp: Employee) {
+    setSelectedEmployeeForFace(emp)
+    setShowFacialCamera(true)
+  }
+
+  const handleFacialSuccess = React.useCallback(async (result: any) => {
+    setShowFacialCamera(false)
+    toast.success('Face cadastrada com sucesso!')
+    setSelectedEmployeeForFace(null)
+    // Recarregar lista completa para garantir dados atualizados
+    load()
+  }, [load])
+
+  const handleFacialError = React.useCallback((error: string) => {
+    setShowFacialCamera(false)
+    toast.error(error || 'Erro ao cadastrar face')
+    setSelectedEmployeeForFace(null)
+  }, [])
+
+  function handleEmployeeUpdated() {
+    load() // Recarregar lista
+    setEditingEmployeeId(null)
   }
 
   // Comentário: Filtra funcionários pela busca
@@ -257,26 +280,41 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
               </span>
               <EmployeeActionsMenu
                 employee={emp}
-                onEdit={(employee) => onEditEmployee?.(employee.id)}
+                onEdit={(e) => setEditingEmployeeId(e.id)}
                 onDeactivate={toggleActive}
                 onDelete={remove}
-                hasFaceRegistered={emp.allowFacialRecognition}
+                onDisableFaceRecognition={deleteFace}
+                onRegisterFace={openFacialCamera}
+                hasFaceRegistered={emp.faceRegistered || false}
+                allowFacialRecognition={emp.allowFacialRecognition || false}
               />
             </div>
           </div>
         ))
       )}
 
-      {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-md border border-border bg-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-semibold">Editar Funcionário</p>
-              <button onClick={() => setEditing(null)} className="text-sm text-muted-foreground">Fechar</button>
-            </div>
-            <EmployeeSettingsForm employee={editing} onSaved={onSaved} onCancel={() => setEditing(null)} />
-          </div>
-        </div>
+      {editingEmployeeId && (
+        <EditEmployeeModal
+          isOpen={true}
+          onClose={() => setEditingEmployeeId(null)}
+          onEmployeeUpdated={handleEmployeeUpdated}
+          companyId={user?.companyId || ''}
+          employeeId={editingEmployeeId}
+        />
+      )}
+
+      {/* Modal da câmera facial */}
+      {showFacialCamera && selectedEmployeeForFace && (
+        <FacialRecognitionFlow
+          mode="registration"
+          authMode="admin"
+          userId={selectedEmployeeForFace.id}
+          userEmail={selectedEmployeeForFace.email}
+          onRegistrationSuccess={handleFacialSuccess}
+          onRegistrationError={handleFacialError}
+          autoOpenCamera={true}
+          showButton={false}
+        />
       )}
     </div>
   )

@@ -47,7 +47,7 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
     allowRemoteClockIn: false,
     allowFacialRecognition: false,
     requireLiveness: false,
-    geofenceId: '',
+    geofenceId: '' as string | null,
     lateToleranceMinutes: 15,
     allowOvertime: false,
     allowOvertimeBefore: false,
@@ -341,7 +341,7 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
         baseSalary: parseFloat(formData.salary),
         positionId: formData.positionId || undefined,
         departmentId: formData.departmentId || undefined,
-        geofenceId: formData.geofenceId || undefined,
+        geofenceId: formData.geofenceId === null ? null : (formData.geofenceId || undefined),
         workStartTime: formData.workStartTime,
         workEndTime: formData.workEndTime,
         breakStartTime: formData.breakStartTime || undefined,
@@ -679,37 +679,31 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
                     {/* Submenu: Cerca Geográfica */}
                     {formData.allowRemoteClockIn && (
                       <div className="space-y-3 pl-8 border-l-2 border-primary/20">
-                        <CheckboxWithIcon
-                          icon={<MapPin className="h-4 w-4" />}
-                          label="Exigir Cerca Geográfica"
-                          description="Restringir ponto remoto a locais específicos"
-                          checked={formData.requireGeofence}
-                          onCheckedChange={(checked) => 
-                            setFormData(prev => ({ ...prev, requireGeofence: checked as boolean }))
-                          }
-                        />
-                        
-                        {formData.requireGeofence && (
-                          <div className="space-y-2">
-                            <Label className="text-sm">Selecionar Cerca</Label>
-                            <Select
-                              value={formData.geofenceId || 'none'}
-                              onValueChange={(value) => setFormData(prev => ({ ...prev, geofenceId: value === 'none' ? '' : value }))}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione uma cerca" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Nenhuma</SelectItem>
-                                {geofences.map((gf) => (
-                                  <SelectItem key={gf.id} value={gf.id}>
-                                    {gf.name} {gf.radiusMeters && `(${gf.radiusMeters}m)`}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
+                        <div className="space-y-2">
+                          <Label className="text-sm flex items-center gap-2">
+                            <MapPin className="h-4 w-4" />
+                            Cerca Geográfica
+                          </Label>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            Restrinja o ponto remoto a locais específicos. Selecione "Nenhuma" para permitir de qualquer lugar.
+                          </p>
+                          <Select
+                            value={formData.geofenceId || 'none'}
+                            onValueChange={(value) => setFormData(prev => ({ ...prev, geofenceId: value === 'none' ? null : value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione uma cerca" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Nenhuma (qualquer lugar)</SelectItem>
+                              {geofences.map((gf) => (
+                                <SelectItem key={gf.id} value={gf.id}>
+                                  {gf.name} {gf.radiusMeters && `(${gf.radiusMeters}m)`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     )}
 

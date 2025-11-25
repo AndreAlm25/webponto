@@ -35,6 +35,10 @@ export class ComplianceController {
       customOvertimeRate?: number;
       customHolidayRate?: number;
       warnOnViolation?: boolean;
+      enableTolerances?: boolean;
+      earlyEntryToleranceMinutes?: number;
+      lateExitToleranceMinutes?: number;
+      lateArrivalToleranceMinutes?: number;
     },
   ) {
     return this.complianceService.updateCompanyCompliance(companyId, data);

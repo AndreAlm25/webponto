@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import PageHeader from '@/components/admin/PageHeader'
 import { Scale, AlertTriangle, Save } from 'lucide-react'
 import { Label } from '@/components/ui/label'
+import { useCompanySlug } from '@/hooks/useCompanySlug'
+import { toast } from 'sonner'
 
 type ComplianceLevel = 'FULL' | 'FLEXIBLE' | 'CUSTOM'
 
@@ -28,6 +30,9 @@ export default function CompliancePage() {
   const params = useParams()
   const router = useRouter()
   const company = params?.company as string
+  
+  // Hook para obter o companyId (UUID) a partir do slug
+  const { companyId, loading: loadingAuth } = useCompanySlug()
 
   const [config, setConfig] = useState<ComplianceConfig>({
     complianceLevel: 'FULL',
@@ -50,14 +55,14 @@ export default function CompliancePage() {
 
   // Carregar configurações
   useEffect(() => {
-    if (!company) return
+    if (!companyId || loadingAuth) return
 
     const fetchConfig = async () => {
       try {
         const token = localStorage.getItem('token')
         const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-        const res = await fetch(`${api}/api/compliance?companyId=${company}`, {
+        const res = await fetch(`${api}/api/compliance?companyId=${companyId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
 
@@ -68,25 +73,34 @@ export default function CompliancePage() {
             customOvertimeRate: Number(data.customOvertimeRate) || 1.5,
             customHolidayRate: Number(data.customHolidayRate) || 2.0,
           })
+        } else {
+          const errorData = await res.json()
+          toast.error(errorData?.message || 'Erro ao carregar configurações')
         }
       } catch (error) {
         console.error('Erro ao carregar configurações:', error)
+        toast.error('Erro ao carregar configurações')
       } finally {
         setLoading(false)
       }
     }
 
     fetchConfig()
-  }, [company])
+  }, [companyId, loadingAuth])
 
   // Salvar configurações
   const handleSave = async () => {
+    if (!companyId) {
+      toast.error('ID da empresa não encontrado')
+      return
+    }
+
     setSaving(true)
     try {
       const token = localStorage.getItem('token')
       const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-      const res = await fetch(`${api}/api/compliance?companyId=${company}`, {
+      const res = await fetch(`${api}/api/compliance?companyId=${companyId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -96,13 +110,15 @@ export default function CompliancePage() {
       })
 
       if (res.ok) {
-        alert('✅ Configurações salvas com sucesso!')
+        toast.success('Configurações salvas com sucesso!')
       } else {
-        alert('❌ Erro ao salvar configurações')
+        const errorData = await res.json()
+        console.error('Erro ao salvar:', errorData)
+        toast.error(errorData?.message || 'Erro ao salvar configurações')
       }
     } catch (error) {
       console.error('Erro ao salvar:', error)
-      alert('❌ Erro ao salvar configurações')
+      toast.error('Erro ao salvar configurações')
     } finally {
       setSaving(false)
     }

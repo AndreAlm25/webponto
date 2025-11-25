@@ -480,31 +480,7 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
     setShowFacialCamera(true)
   }, [])
 
-  // Excluir face
-  const handleDeleteFace = React.useCallback(async () => {
-    if (!confirm('Tem certeza que deseja excluir o cadastro facial?')) return
-    
-    try {
-      const employeeId = (user as any)?.employee?.id || (user as any)?.funcionario?.id
-      const token = localStorage.getItem('token')
-      
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/time-entries/facial/${employeeId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      
-      if (response.ok) {
-        toast.success('Face excluída com sucesso!')
-        setHasFaceRegistered(false)
-        await checkFaceStatus()
-      } else {
-        const data = await response.json()
-        toast.error(data.message || 'Erro ao excluir face')
-      }
-    } catch (error: any) {
-      toast.error('Erro ao excluir face')
-    }
-  }, [user, checkFaceStatus])
+  // Função handleDeleteFace removida - exclusão de face agora é feita apenas pelo admin
 
   const timeStr = now ? now.toLocaleTimeString('pt-BR', { hour12: false }) : ''
   const dateStr = now ? new Intl.DateTimeFormat('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: '2-digit' }).format(now) : ''
@@ -812,28 +788,16 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
               />
             )}
             {facialRecognitionEnabled && !checkingFaceStatus && hasFaceRegistered && (
-              <>
-                <ActionButton
-                  label="RECONHECIMENTO FACIAL"
-                  icon={<ScanFace className="w-5 h-5" />}
-                  bgColor="#01BB74"
-                  textColor="#fff"
-                  border
-                  borderColor="#008D57"
-                  className={`${roboto.className}`}
-                  onClick={() => openFacialCamera('recognition')}
-                />
-                <ActionButton
-                  label="EXCLUIR FACE"
-                  icon={<UserRound className="w-5 h-5" />}
-                  bgColor="#BA2C2E"
-                  textColor="#fff"
-                  border
-                  borderColor="#A10003"
-                  className={`${roboto.className}`}
-                  onClick={handleDeleteFace}
-                />
-              </>
+              <ActionButton
+                label="RECONHECIMENTO FACIAL"
+                icon={<ScanFace className="w-5 h-5" />}
+                bgColor="#01BB74"
+                textColor="#fff"
+                border
+                borderColor="#008D57"
+                className={`${roboto.className}`}
+                onClick={() => openFacialCamera('recognition')}
+              />
             )}
             
             {/* Botões de ponto manual (só aparecem se reconhecimento facial NÃO estiver ativo) */}

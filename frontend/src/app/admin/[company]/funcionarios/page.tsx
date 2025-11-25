@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { notFound } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { useWebSocket } from '@/contexts/WebSocketContext'
 import { Users, Plus, Search, UserCheck, Clock, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +32,16 @@ export default function EmployeesPage({ params }: { params: { company: string } 
   // Hook que valida slug
   const { companyId, companySlug, slugMismatch, loading } = useCompanySlug()
   
+  // WebSocket para atualização em tempo real
+  const { 
+    connected, 
+    onEmployeeCreated, 
+    onEmployeeUpdated, 
+    onEmployeeDeleted,
+    onFaceRegistered,
+    onFaceDeleted
+  } = useWebSocket()
+  
   if (!company) notFound()
   
   // Exibe erro se slug não corresponde
@@ -51,10 +62,11 @@ export default function EmployeesPage({ params }: { params: { company: string } 
         )
         
         if (response.ok) {
-          const employees = await response.json()
+          const data = await response.json()
+          const employees = Array.isArray(data?.employees) ? data.employees : (Array.isArray(data) ? data : [])
           setEmployeeStats({
             total: employees.length,
-            withFacial: employees.filter((e: any) => e.facialRecognitionRequired).length,
+            withFacial: employees.filter((e: any) => e.allowFacialRecognition).length,
             remote: employees.filter((e: any) => e.allowRemoteClockIn).length,
             active: employees.filter((e: any) => e.status === 'ACTIVE').length
           })
@@ -66,6 +78,66 @@ export default function EmployeesPage({ params }: { params: { company: string } 
     
     fetchStats()
   }, [companyId, refreshKey])
+
+  // WebSocket: Atualizar stats quando funcionário for criado
+  useEffect(() => {
+    if (!connected) return
+    
+    const unsubscribe = onEmployeeCreated(() => {
+      console.log('[EmployeesPage] 📥 Funcionário criado - atualizando stats')
+      setRefreshKey(prev => prev + 1)
+    })
+    
+    return unsubscribe
+  }, [connected, onEmployeeCreated])
+
+  // WebSocket: Atualizar stats quando funcionário for atualizado
+  useEffect(() => {
+    if (!connected) return
+    
+    const unsubscribe = onEmployeeUpdated(() => {
+      console.log('[EmployeesPage] 📥 Funcionário atualizado - atualizando stats')
+      setRefreshKey(prev => prev + 1)
+    })
+    
+    return unsubscribe
+  }, [connected, onEmployeeUpdated])
+
+  // WebSocket: Atualizar stats quando funcionário for deletado
+  useEffect(() => {
+    if (!connected) return
+    
+    const unsubscribe = onEmployeeDeleted(() => {
+      console.log('[EmployeesPage] 📥 Funcionário deletado - atualizando stats')
+      setRefreshKey(prev => prev + 1)
+    })
+    
+    return unsubscribe
+  }, [connected, onEmployeeDeleted])
+
+  // WebSocket: Atualizar stats quando face for registrada
+  useEffect(() => {
+    if (!connected) return
+    
+    const unsubscribe = onFaceRegistered(() => {
+      console.log('[EmployeesPage] 📥 Face registrada - atualizando stats')
+      setRefreshKey(prev => prev + 1)
+    })
+    
+    return unsubscribe
+  }, [connected, onFaceRegistered])
+
+  // WebSocket: Atualizar stats quando face for deletada
+  useEffect(() => {
+    if (!connected) return
+    
+    const unsubscribe = onFaceDeleted(() => {
+      console.log('[EmployeesPage] 📥 Face deletada - atualizando stats')
+      setRefreshKey(prev => prev + 1)
+    })
+    
+    return unsubscribe
+  }, [connected, onFaceDeleted])
 
   const base = company ? `/admin/${encodeURIComponent(company)}` : '/admin'
 

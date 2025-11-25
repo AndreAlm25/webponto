@@ -2,7 +2,7 @@
 // Sidebar do Admin (código em inglês; textos em português)
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp } from 'lucide-react'
+import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp, List } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
@@ -134,6 +134,15 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
           {isMenuExpanded('analises') && !collapsed && (
             <div className="ml-6 border-l border-border space-y-1">
               <button
+                onClick={() => router.push(`${base}/analises/registros`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/analises/registros`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <List className="h-3 w-3 mr-2" />
+                <span>Registros</span>
+              </button>
+              <button
                 onClick={() => router.push(`${base}/analises/hora-extra`)}
                 className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
                   isActive(`${base}/analises/hora-extra`) ? 'bg-muted/50 font-medium' : ''
@@ -174,6 +183,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">
                 Análises
               </div>
+              <button
+                onClick={() => {
+                  router.push(`${base}/analises/registros`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/analises/registros`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <List className="h-4 w-4 mr-2" />
+                <span>Registros</span>
+              </button>
               <button
                 onClick={() => {
                   router.push(`${base}/analises/hora-extra`)

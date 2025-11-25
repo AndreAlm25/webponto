@@ -4,12 +4,11 @@
 // - Código em inglês; textos em português
 
 import React, { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { listGeofences, createGeofence, deleteGeofence, Geofence } from '@/lib/api/geofences'
 import { MapGeofence } from '@/components/geo/MapGeofence'
 import { AddressSearch } from '@/components/geo/AddressSearch'
-import { MapPin, ChevronRight, Save, Edit, Trash2, Navigation } from 'lucide-react'
+import { MapPin, Save, Edit, Trash2, Navigation } from 'lucide-react'
 import { InputField } from '@/components/ui/input-field'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
@@ -17,6 +16,7 @@ import { PrimaryButton } from '@/components/ui/PrimaryButton'
 import { IconButton } from '@/components/ui/IconButton'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { toast } from 'sonner'
+import PageHeader from '@/components/admin/PageHeader'
 
 export default function GeofencesCompanyPage() {
   const params = useParams<{ company: string }>()
@@ -256,22 +256,20 @@ export default function GeofencesCompanyPage() {
     return <SlugMismatchError urlSlug={urlSlug} correctSlug={companySlug} currentPath={`/admin/${urlSlug}/cercas-geograficas`} />
   }
 
+  const base = `/admin/${urlSlug}`
+
   return (
     <div className="p-4 space-y-6">
-      {/* Título com ícone (PT-BR) */}
-      <div className="flex items-center gap-2">
-        <MapPin className="h-5 w-5 text-primary" />
-        <h1 className="text-xl font-semibold">Cercas geográficas</h1>
-      </div>
-
-      {/* Breadcrumb */}
-      <nav className="text-xs text-muted-foreground flex items-center gap-1">
-        <Link href={`/admin/${encodeURIComponent(companySlug)}`} className="hover:underline">Admin</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="truncate max-w-[40ch]">{companySlug || urlSlug}</span>
-        <ChevronRight className="h-3 w-3" />
-        <span>Cercas geográficas</span>
-      </nav>
+      <PageHeader
+        title="Cercas Geográficas"
+        description="Gerencie as cercas geográficas da empresa"
+        icon={<MapPin className="h-6 w-6" />}
+        breadcrumbs={[
+          { label: 'Admin', href: base },
+          { label: 'G. de Colaboradores' },
+          { label: 'Cercas Geográficas' }
+        ]}
+      />
 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="md:col-span-1 space-y-3">

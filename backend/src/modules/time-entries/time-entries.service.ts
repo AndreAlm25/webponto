@@ -105,11 +105,18 @@ export class TimeEntriesService {
         detectionData.overtimeMinutes,
       );
 
-      // Se não permitido (bloqueado), lançar erro
+      // Se não permitido (bloqueado), lançar erro com mensagem detalhada
       if (!complianceValidation.allowed) {
         this.logger.error(`🚫 [COMPLIANCE] Registro bloqueado por violação CLT`);
+        
+        // Criar mensagem detalhada baseada nas violações
+        let detailedMessage = 'Registro de ponto bloqueado por violação das regras CLT';
+        if (complianceValidation.violations.length > 0) {
+          detailedMessage = complianceValidation.violations.join('. ');
+        }
+        
         throw new BadRequestException({
-          message: 'Registro de ponto bloqueado por violação das regras CLT',
+          message: detailedMessage,
           violations: complianceValidation.violations,
           type: 'COMPLIANCE_VIOLATION',
         });
@@ -163,6 +170,12 @@ export class TimeEntriesService {
             select: {
               id: true,
               registrationId: true,
+              user: {
+                select: {
+                  name: true,
+                  avatarUrl: true,
+                },
+              },
             },
           },
         },
@@ -226,6 +239,37 @@ export class TimeEntriesService {
     const timestamp = new Date();
     const detectionData = await this.detectOvertimeAndViolations(input.employeeId, timestamp, input.type);
 
+    // Validar conformidade CLT (mesma validação do ponto facial)
+    const complianceValidation = await this.complianceService.validateTimeEntry(
+      input.companyId,
+      input.employeeId,
+      timestamp,
+      input.type,
+      detectionData.overtimeMinutes,
+    );
+
+    // Se não permitido (bloqueado), lançar erro com mensagem detalhada
+    if (!complianceValidation.allowed) {
+      this.logger.error(`🚫 [COMPLIANCE] Ponto manual bloqueado por violação CLT`);
+      
+      // Criar mensagem detalhada baseada nas violações
+      let detailedMessage = 'Registro de ponto bloqueado por violação das regras CLT';
+      if (complianceValidation.violations.length > 0) {
+        detailedMessage = complianceValidation.violations.join('. ');
+      }
+      
+      throw new BadRequestException({
+        message: detailedMessage,
+        violations: complianceValidation.violations,
+        type: 'COMPLIANCE_VIOLATION',
+      });
+    }
+
+    // Se tem avisos, logar
+    if (complianceValidation.shouldWarn && complianceValidation.violations.length > 0) {
+      this.logger.warn(`⚠️ [COMPLIANCE] Violações detectadas no ponto manual: ${complianceValidation.violations.join(', ')}`);
+    }
+
     const timeEntry = await this.prisma.timeEntry.create({
       data: {
         companyId: input.companyId,
@@ -260,7 +304,18 @@ export class TimeEntriesService {
         restHours: detectionData.restHours,
       },
       include: {
-        employee: { select: { id: true, registrationId: true } },
+        employee: {
+          select: {
+            id: true,
+            registrationId: true,
+            user: {
+              select: {
+                name: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
       },
     })
 
@@ -484,6 +539,12 @@ export class TimeEntriesService {
       this.logger.log(`🔥 [CADASTRO] ✅ CADASTRO CONCLUÍDO COM SUCESSO!`);
       this.logger.log(`🔥 [CADASTRO] Employee: ${employee.id} (${subjectId})`);
       this.logger.log(`🔥 [CADASTRO] FaceProfile: ${faceProfile.id}`);
+
+      // 8. Emitir evento WebSocket para atualizar frontend em tempo real
+      this.logger.log(`🔥 [CADASTRO] Emitindo evento WebSocket face-registered...`);
+      this.eventsGateway.emitFaceRegistered(companyId, employeeUpdated.id, {
+        faceRegistered: true,
+      });
 
       return {
         success: true,
@@ -863,10 +924,62 @@ export class TimeEntriesService {
 
     this.logger.log(`Face excluída do BD (Employee e FaceProfile): ${employeeId}`)
 
+    // Emitir evento WebSocket
+    this.eventsGateway.emitFaceDeleted(companyId, employeeId)
+
     return {
       success: true,
       message: 'Face excluída com sucesso',
     }
+  }
+
+  /**
+   * List all time entries for a company (for admin dashboard)
+   */
+  async listarTodosRegistros(
+    companyId: string,
+    employeeId?: string,
+    dataInicio?: Date,
+    dataFim?: Date,
+    limit?: number,
+  ) {
+    const where: any = {
+      companyId,
+    };
+
+    if (employeeId) {
+      where.employeeId = employeeId;
+    }
+
+    if (dataInicio || dataFim) {
+      where.timestamp = {};
+      if (dataInicio) where.timestamp.gte = startOfDay(dataInicio);
+      if (dataFim) where.timestamp.lte = endOfDay(dataFim);
+    }
+
+    const timeEntries = await this.prisma.timeEntry.findMany({
+      where,
+      orderBy: {
+        timestamp: 'desc',
+      },
+      take: limit,
+      include: {
+        employee: {
+          select: {
+            id: true,
+            registrationId: true,
+            user: {
+              select: {
+                name: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return timeEntries;
   }
 
   /**

@@ -3,17 +3,43 @@
 import React, { useEffect, useState } from 'react'
 import { notFound } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { Users, Camera, Clock, Bell, MapPin, TrendingUp, AlertCircle, CheckCircle2, ClockArrowUp, ClockArrowDown, LayoutDashboard } from 'lucide-react'
+import { Users, Camera, Clock, MapPin, TrendingUp, AlertCircle, CheckCircle2, ClockArrowUp, ClockArrowDown, LayoutDashboard, UserRound } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import Image from 'next/image'
+import { useWebSocket } from '@/contexts/WebSocketContext'
+
+// Helper para construir URL completa do avatar
+const getAvatarUrl = (avatarUrl: string | null | undefined): string | null => {
+  if (!avatarUrl) return null
+  
+  // Se já é uma URL completa, retorna como está
+  if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+    return avatarUrl
+  }
+  
+  // Constrói URL completa usando a API do backend
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+  return `${apiUrl}/api/files/avatars/${avatarUrl}`
+}
 
 export default function CompanyAdminSlugPage({ params }: { params: { company: string } }) {
   const { user } = useAuth()
   const { company } = params
   const [recentEntries, setRecentEntries] = useState<any[]>([])
   const [loadingEntries, setLoadingEntries] = useState(true)
+  const [stats, setStats] = useState({
+    totalEmployees: 0,
+    activeEmployees: 0,
+    todayEntries: 0,
+    facialRecognitionEnabled: 0,
+    pendingOvertime: 0,
+    alerts: 0,
+  })
+  const [loadingStats, setLoadingStats] = useState(true)
+  const { onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted } = useWebSocket()
   
   // Log detalhado do slug da URL
   useEffect(() => {
@@ -41,31 +67,195 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
     return <SlugMismatchError urlSlug={company} correctSlug={companySlug} currentPath={`/admin/${company}`} />
   }
 
-  // Buscar registros recentes
-  useEffect(() => {
-    const fetchRecentEntries = async () => {
-      if (!companyId) return
+  // Buscar estatísticas
+  const fetchStats = async () => {
+      if (!companyId) {
+        console.log('📊 [Stats] companyId não disponível ainda')
+        return
+      }
+      
+      console.log('📊 [Stats] Iniciando busca de estatísticas para companyId:', companyId)
       
       try {
         const token = localStorage.getItem('token')
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&limit=5`,
+        
+        // Buscar funcionários
+        console.log('📊 [Stats] Buscando funcionários...')
+        const employeesRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/employees?companyId=${companyId}`,
           { headers: { Authorization: `Bearer ${token}` } }
         )
         
-        if (response.ok) {
-          const data = await response.json()
-          setRecentEntries(data.slice(0, 5))
+        console.log('📊 [Stats] Response funcionários:', employeesRes.status)
+        
+        if (employeesRes.ok) {
+          const employeesData = await employeesRes.json()
+          console.log('📊 [Stats] Dados funcionários:', employeesData)
+          
+          const employees = Array.isArray(employeesData?.employees) ? employeesData.employees : (Array.isArray(employeesData) ? employeesData : [])
+          console.log('📊 [Stats] Funcionários processados:', employees.length)
+          
+          const total = employees.length
+          const active = employees.filter((e: any) => e.status === 'ACTIVE' || e.active).length
+          const withFacial = employees.filter((e: any) => e.allowFacialRecognition).length
+          
+          console.log('📊 [Stats] Total:', total, 'Ativos:', active, 'Com facial:', withFacial)
+          
+          setStats(prev => ({
+            ...prev,
+            totalEmployees: total,
+            activeEmployees: active,
+            facialRecognitionEnabled: withFacial,
+          }))
         }
+        
+        // Buscar registros de hoje
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const todayISO = today.toISOString()
+        
+        console.log('📊 [Stats] Buscando registros de hoje...')
+        console.log('📊 [Stats] Data hoje (ISO):', todayISO)
+        
+        const entriesUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&startDate=${todayISO}`
+        console.log('📊 [Stats] URL:', entriesUrl)
+        
+        const entriesRes = await fetch(entriesUrl, { headers: { Authorization: `Bearer ${token}` } })
+        
+        console.log('📊 [Stats] Response registros:', entriesRes.status)
+        
+        if (entriesRes.ok) {
+          const entriesData = await entriesRes.json()
+          console.log('📊 [Stats] Dados registros:', entriesData)
+          
+          const entries = Array.isArray(entriesData) ? entriesData : []
+          console.log('📊 [Stats] Total de registros hoje:', entries.length)
+          
+          setStats(prev => ({ ...prev, todayEntries: entries.length }))
+        } else {
+          console.error('📊 [Stats] Erro ao buscar registros:', await entriesRes.text())
+        }
+        
       } catch (error) {
-        console.error('Erro ao buscar registros:', error)
+        console.error('📊 [Stats] Erro ao buscar estatísticas:', error)
       } finally {
-        setLoadingEntries(false)
+        setLoadingStats(false)
       }
     }
+  
+  useEffect(() => {
+    fetchStats()
+  }, [companyId])
+
+  // Buscar registros recentes
+  const fetchRecentEntries = async () => {
+    if (!companyId) {
+      console.log('📋 [Recentes] companyId não disponível ainda')
+      return
+    }
     
+    console.log('📋 [Recentes] Buscando registros recentes para companyId:', companyId)
+    
+    try {
+      const token = localStorage.getItem('token')
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&limit=10`
+      console.log('📋 [Recentes] URL:', url)
+      
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      
+      console.log('📋 [Recentes] Response:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('📋 [Recentes] Dados recebidos:', data)
+        console.log('📋 [Recentes] Total de registros:', Array.isArray(data) ? data.length : 0)
+        
+        const entries = Array.isArray(data) ? data.slice(0, 10) : []
+        console.log('📋 [Recentes] Registros a exibir:', entries.length)
+        
+        // Log detalhado de cada registro
+        entries.forEach((entry, index) => {
+          console.log(`📋 [Recentes] Registro ${index + 1}:`, {
+            id: entry.id,
+            type: entry.type,
+            userName: entry.employee?.user?.name,
+            avatarUrl: entry.employee?.user?.avatarUrl,
+            employee: entry.employee
+          })
+        })
+        
+        setRecentEntries(entries)
+      } else {
+        console.error('📋 [Recentes] Erro ao buscar:', await response.text())
+      }
+    } catch (error) {
+      console.error('📋 [Recentes] Erro ao buscar registros:', error)
+    } finally {
+      setLoadingEntries(false)
+    }
+  }
+  
+  useEffect(() => {
     fetchRecentEntries()
   }, [companyId])
+
+  // WebSocket para atualização em tempo real usando context global
+  useEffect(() => {
+    if (!companyId) return
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🔌 [WebSocket Dashboard] Registrando listeners...')
+    console.log('🔌 [WebSocket Dashboard] CompanyId:', companyId)
+
+    // Registrar listener para novos registros
+    const unsubscribeCreated = onTimeEntryCreated((timeEntry: any) => {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('🆕 [WebSocket Dashboard] EVENTO RECEBIDO: time-entry-created')
+      console.log('🆕 [WebSocket Dashboard] Dados completos:', JSON.stringify(timeEntry, null, 2))
+      console.log('🆕 [WebSocket Dashboard] timeEntry.id:', timeEntry.id)
+      console.log('🆕 [WebSocket Dashboard] timeEntry.type:', timeEntry.type)
+      console.log('🆕 [WebSocket Dashboard] timeEntry.employee?.user:', timeEntry.employee?.user)
+      console.log('🆕 [WebSocket Dashboard] Avatar:', timeEntry.employee?.user?.avatarUrl)
+      console.log('🆕 [WebSocket Dashboard] Nome:', timeEntry.employee?.user?.name)
+      
+      // Atualizar lista de registros recentes
+      setRecentEntries(prev => {
+        const updated = [timeEntry, ...prev].slice(0, 10)
+        console.log('🆕 [WebSocket Dashboard] Lista atualizada! Total:', updated.length)
+        return updated
+      })
+      
+      // Atualizar estatísticas
+      fetchStats()
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    })
+
+    // Registrar listener para registros atualizados
+    const unsubscribeUpdated = onTimeEntryUpdated((timeEntry: any) => {
+      console.log('🔄 [WebSocket Dashboard] Registro atualizado:', timeEntry.id)
+      setRecentEntries(prev => 
+        prev.map(entry => entry.id === timeEntry.id ? timeEntry : entry)
+      )
+    })
+
+    // Registrar listener para registros deletados
+    const unsubscribeDeleted = onTimeEntryDeleted((data: { id: string }) => {
+      console.log('🗑️ [WebSocket Dashboard] Registro deletado:', data.id)
+      setRecentEntries(prev => prev.filter(entry => entry.id !== data.id))
+      fetchStats()
+    })
+
+    console.log('✅ [WebSocket Dashboard] Listeners registrados com sucesso!')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    // Cleanup: remover listeners ao desmontar
+    return () => {
+      console.log('🔌 [WebSocket Dashboard] Removendo listeners...')
+      unsubscribeCreated()
+      unsubscribeUpdated()
+      unsubscribeDeleted()
+    }
+  }, [companyId, onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted])
 
   return (
     <>
@@ -89,21 +279,21 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
             <StatCard 
               title="Total Funcionários" 
               icon={<Users className="h-5 w-5" />} 
-              value="—" 
-              subtitle="Ativos" 
+              value={loadingStats ? '—' : stats.totalEmployees.toString()} 
+              subtitle={`${stats.activeEmployees} Ativos`}
               color="blue"
             />
             <StatCard 
               title="Registros Hoje" 
               icon={<Clock className="h-5 w-5" />} 
-              value="—" 
+              value={loadingStats ? '—' : stats.todayEntries.toString()} 
               subtitle="Últimas 24h" 
               color="green"
             />
             <StatCard 
               title="Com Reconhecimento" 
               icon={<Camera className="h-5 w-5" />} 
-              value="—" 
+              value={loadingStats ? '—' : stats.facialRecognitionEnabled.toString()} 
               subtitle="Facial ativo" 
               color="purple"
             />
@@ -117,14 +307,14 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
             <StatCard 
               title="Hora Extra" 
               icon={<TrendingUp className="h-5 w-5" />} 
-              value="—" 
+              value={loadingStats ? '—' : stats.pendingOvertime.toString()} 
               subtitle="Pendentes" 
               color="yellow"
             />
             <StatCard 
               title="Alertas" 
               icon={<AlertCircle className="h-5 w-5" />} 
-              value="—" 
+              value={loadingStats ? '—' : stats.alerts.toString()} 
               subtitle="Requer atenção" 
               color="red"
             />
@@ -135,11 +325,11 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
         <div className="space-y-4">
           <div className="border border-border rounded-lg bg-card">
             <div className="p-4 border-b border-border">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Registros Recentes
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <UserRound className="h-6 w-6" />
+                Registros recentes
               </h3>
-              <p className="text-sm text-muted-foreground">Últimos registros de ponto</p>
+              <p className="text-sm text-muted-foreground">Últimos registros de pontos</p>
             </div>
             <div className="p-4 space-y-3">
               {loadingEntries ? (
@@ -147,41 +337,84 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
               ) : recentEntries.length === 0 ? (
                 <EmptyText>Sem registros</EmptyText>
               ) : (
-                recentEntries.map((entry: any) => (
-                  <div key={entry.id} className="flex items-start gap-3 text-sm">
-                    <div className="mt-0.5">
-                      {entry.type === 'CLOCK_IN' && <ClockArrowUp className="h-4 w-4 text-green-500" />}
-                      {entry.type === 'CLOCK_OUT' && <ClockArrowDown className="h-4 w-4 text-red-500" />}
-                      {entry.type === 'BREAK_START' && <Clock className="h-4 w-4 text-yellow-500" />}
-                      {entry.type === 'BREAK_END' && <Clock className="h-4 w-4 text-blue-500" />}
+                <>
+                  {recentEntries.map((entry: any) => {
+                    const rawAvatarUrl = entry.employee?.user?.avatarUrl
+                    const avatarUrl = getAvatarUrl(rawAvatarUrl)
+                    const userName = entry.employee?.user?.name || 'Nome funcionário'
+                    
+                    console.log('👤 [Avatar] Entry:', {
+                      id: entry.id,
+                      userName,
+                      rawAvatarUrl,
+                      avatarUrl,
+                      employee: entry.employee,
+                      user: entry.employee?.user
+                    })
+                    
+                    return (
+                    <div key={entry.id} className="space-y-1.5 pb-3 border-b border-border last:border-0 last:pb-0">
+                      <div className="flex items-center gap-2">
+                        {avatarUrl ? (
+                          <Image
+                            src={avatarUrl}
+                            alt={userName}
+                            width={16}
+                            height={16}
+                            className="rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="h-4 w-4 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <UserRound className="h-3 w-3" />
+                          </div>
+                        )}
+                        <p className="font-medium text-sm truncate">{userName}</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {entry.type === 'CLOCK_IN' && (
+                            <>
+                              <ClockArrowUp className="h-4 w-4 text-green-600 flex-shrink-0" />
+                              <span className="text-green-600 text-xs font-medium uppercase whitespace-nowrap">Entrada</span>
+                            </>
+                          )}
+                          {entry.type === 'CLOCK_OUT' && (
+                            <>
+                              <ClockArrowDown className="h-4 w-4 text-red-600 flex-shrink-0" />
+                              <span className="text-red-600 text-xs font-medium uppercase whitespace-nowrap">Saída</span>
+                            </>
+                          )}
+                          {entry.type === 'BREAK_START' && (
+                            <>
+                              <Clock className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                              <span className="text-yellow-600 text-xs font-medium uppercase whitespace-nowrap">Início intervalo</span>
+                            </>
+                          )}
+                          {entry.type === 'BREAK_END' && (
+                            <>
+                              <Clock className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                              <span className="text-orange-600 text-xs font-medium uppercase whitespace-nowrap">Volta intervalo</span>
+                            </>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                          {new Date(entry.timestamp).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                          {' - '}
+                          {new Date(entry.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{entry.employee?.name || 'Funcionário'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {entry.type === 'CLOCK_IN' && 'Entrada'}
-                        {entry.type === 'CLOCK_OUT' && 'Saída'}
-                        {entry.type === 'BREAK_START' && 'Início intervalo'}
-                        {entry.type === 'BREAK_END' && 'Fim intervalo'}
-                        {' • '}
-                        {new Date(entry.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
+                  )})}
+                  <div className="pt-2">
+                    <a 
+                      href={`/admin/${company}/analises/registros`}
+                      className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                    >
+                      Ver todos os registros →
+                    </a>
                   </div>
-                ))
+                </>
               )}
-            </div>
-          </div>
-
-          <div className="border border-border rounded-lg bg-card">
-            <div className="p-4 border-b border-border">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Bell className="h-4 w-4" />
-                Notificações
-              </h3>
-              <p className="text-sm text-muted-foreground">Últimas atualizações</p>
-            </div>
-            <div className="p-4 space-y-3">
-              <EmptyText>Nenhuma notificação</EmptyText>
             </div>
           </div>
         </div>
@@ -198,12 +431,12 @@ function StatCard({ title, value, subtitle, icon, color = 'blue' }: {
   color?: 'blue' | 'green' | 'purple' | 'orange' | 'yellow' | 'red'
 }) {
   const colorClasses = {
-    blue: 'bg-blue-500/10 text-blue-500',
-    green: 'bg-green-500/10 text-green-500',
-    purple: 'bg-purple-500/10 text-purple-500',
-    orange: 'bg-orange-500/10 text-orange-500',
-    yellow: 'bg-yellow-500/10 text-yellow-500',
-    red: 'bg-red-500/10 text-red-500',
+    blue: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    green: 'bg-green-500/10 text-green-600 dark:text-green-400',
+    purple: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+    orange: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+    yellow: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+    red: 'bg-red-500/10 text-red-600 dark:text-red-400',
   }
   
   return (
@@ -211,7 +444,7 @@ function StatCard({ title, value, subtitle, icon, color = 'blue' }: {
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          <div className={`p-2 rounded-lg ${colorClasses[color]} [&>svg]:w-5 [&>svg]:h-5`}>
             {icon}
           </div>
         </div>

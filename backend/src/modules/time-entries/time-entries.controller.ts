@@ -162,6 +162,40 @@ export class TimeEntriesController {
   }
 
   /**
+   * GET /time-entries
+   * Listar todos os registros da empresa (para dashboard admin)
+   */
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  async listarTodosRegistros(
+    @Query('companyId') companyId?: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Request() req?,
+  ) {
+    const userCompanyId: string | undefined = req.user?.companyId;
+    const finalCompanyId = companyId || userCompanyId;
+    
+    if (!finalCompanyId) {
+      throw new UnauthorizedException('Empresa não identificada');
+    }
+
+    const inicio = startDate ? new Date(startDate) : undefined;
+    const fim = endDate ? new Date(endDate) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+
+    return await this.timeEntriesService.listarTodosRegistros(
+      finalCompanyId,
+      employeeId,
+      inicio,
+      fim,
+      limitNum,
+    );
+  }
+
+  /**
    * GET /pontos/:employeeId
    * Listar pontos de um funcionário
    */

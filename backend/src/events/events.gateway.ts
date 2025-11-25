@@ -36,16 +36,28 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('join-company')
   handleJoinCompany(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { companyId: string; userId?: string },
+    @MessageBody() data: any,
   ) {
-    const { companyId, userId } = data;
-    this.logger.log(`👥 Cliente ${client.id} entrou na empresa: ${companyId}`);
+    // Aceitar tanto string quanto objeto
+    const companyId = typeof data === 'string' ? data : data?.companyId;
+    const userId = typeof data === 'object' ? data?.userId : undefined;
+    
+    this.logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    this.logger.log(`👥 [BACKEND] Cliente entrando na empresa`);
+    this.logger.log(`👥 [BACKEND] Client ID: ${client.id}`);
+    this.logger.log(`👥 [BACKEND] CompanyId recebido: ${companyId}`);
+    this.logger.log(`👥 [BACKEND] UserId: ${userId || 'não fornecido'}`);
+    this.logger.log(`👥 [BACKEND] Data recebida: ${JSON.stringify(data)}`);
     
     // Atualizar informações do cliente
     this.connectedClients.set(client.id, { socket: client, companyId, userId });
     
     // Entrar na sala da empresa
     client.join(`company:${companyId}`);
+    
+    this.logger.log(`👥 [BACKEND] Cliente ${client.id} entrou na sala: company:${companyId}`);
+    this.logger.log(`👥 [BACKEND] Total de clientes na sala agora: ${this.server.sockets.adapter.rooms.get(`company:${companyId}`)?.size || 0}`);
+    this.logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     
     return { success: true, message: `Conectado à empresa ${companyId}` };
   }
@@ -72,8 +84,29 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Emitir evento de novo ponto registrado
    */
   emitTimeEntryCreated(companyId: string, timeEntry: any) {
-    this.logger.log(`📤 Emitindo time-entry-created para empresa ${companyId}`);
+    this.logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    this.logger.log(`📤 [BACKEND] Emitindo time-entry-created`);
+    this.logger.log(`📤 [BACKEND] CompanyId: ${companyId}`);
+    this.logger.log(`📤 [BACKEND] Sala: company:${companyId}`);
+    this.logger.log(`📤 [BACKEND] TimeEntry ID: ${timeEntry.id}`);
+    this.logger.log(`📤 [BACKEND] TimeEntry Type: ${timeEntry.type}`);
+    this.logger.log(`📤 [BACKEND] Employee: ${JSON.stringify(timeEntry.employee)}`);
+    this.logger.log(`📤 [BACKEND] Clientes conectados na sala: ${this.server.sockets.adapter.rooms.get(`company:${companyId}`)?.size || 0}`);
+    this.logger.log(`📤 [BACKEND] Total de clientes conectados: ${this.connectedClients.size}`);
+    
+    // Listar todos os clientes na sala
+    const roomClients = this.server.sockets.adapter.rooms.get(`company:${companyId}`);
+    if (roomClients) {
+      this.logger.log(`📤 [BACKEND] IDs dos clientes na sala:`);
+      roomClients.forEach(clientId => {
+        const clientInfo = this.connectedClients.get(clientId);
+        this.logger.log(`   - ${clientId} (companyId: ${clientInfo?.companyId})`);
+      });
+    }
+    
     this.server.to(`company:${companyId}`).emit('time-entry-created', timeEntry);
+    this.logger.log(`📤 [BACKEND] Evento emitido com sucesso!`);
+    this.logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   }
 
   /**

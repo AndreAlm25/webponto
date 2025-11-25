@@ -125,7 +125,7 @@ export class ComplianceService {
 
       if (currentTotalMin < earliestAllowedMin) {
         const earliestTime = `${Math.floor(earliestAllowedMin / 60).toString().padStart(2, '0')}:${(earliestAllowedMin % 60).toString().padStart(2, '0')}`;
-        const violation = `Entrada muito antecipada. Permitido a partir de ${earliestTime}`;
+        const violation = `Entrada muito cedo: você está tentando bater ponto antes do horário permitido. Horário permitido a partir de: ${earliestTime}`;
         violations.push(violation);
         this.logger.warn(`⚠️ [COMPLIANCE] ${violation}`);
       }
@@ -161,7 +161,7 @@ export class ComplianceService {
 
       if (currentTotalMin > latestAllowedMin) {
         const latestTime = `${Math.floor(latestAllowedMin / 60).toString().padStart(2, '0')}:${(latestAllowedMin % 60).toString().padStart(2, '0')}`;
-        const violation = `Saída após horário permitido. Esperado até ${latestTime}`;
+        const violation = `Saída muito tarde: você está tentando bater ponto após o horário permitido. Horário máximo permitido: ${latestTime}`;
         violations.push(violation);
         this.logger.warn(`⚠️ [COMPLIANCE] ${violation}`);
       }
@@ -195,7 +195,7 @@ export class ComplianceService {
 
         // CLT: máximo 10h/dia (8h normais + 2h extras)
         if (totalHours > 10) {
-          const violation = `Jornada de ${totalHours.toFixed(1)}h excede limite de 10h/dia (CLT Art. 58 e 59)`;
+          const violation = `Jornada excedida: você já trabalhou ${totalHours.toFixed(1)}h hoje. Limite máximo permitido: 10h por dia (8h normais + 2h extras - CLT Art. 58 e 59)`;
           violations.push(violation);
           this.logger.warn(`⚠️ [COMPLIANCE] ${violation}`);
         }
@@ -227,7 +227,7 @@ export class ComplianceService {
         const restHours = diffMs / (1000 * 60 * 60);
 
         if (restHours < employee.minRestHours) {
-          const violation = `Descanso de ${restHours.toFixed(1)}h é menor que ${employee.minRestHours}h (CLT Art. 66)`;
+          const violation = `Descanso insuficiente: você teve apenas ${restHours.toFixed(1)}h de descanso entre jornadas. Mínimo exigido: ${employee.minRestHours}h (CLT Art. 66)`;
           violations.push(violation);
           this.logger.warn(`⚠️ [COMPLIANCE] ${violation}`);
         }
@@ -246,7 +246,7 @@ export class ComplianceService {
 
       // CLT: máximo 2h extras/dia
       if (overtimeHours > 2) {
-        const violation = `Hora extra de ${overtimeHours.toFixed(1)}h excede limite de 2h/dia (CLT Art. 59)`;
+        const violation = `Hora extra excedida: você está tentando fazer ${overtimeHours.toFixed(1)}h de hora extra. Limite máximo permitido: 2h por dia (CLT Art. 59)`;
         violations.push(violation);
         this.logger.warn(`⚠️ [COMPLIANCE] ${violation}`);
       }
@@ -260,7 +260,15 @@ export class ComplianceService {
     // REGRA CRÍTICA: NUNCA bloquear CLOCK_OUT!
     // Se bloquear saída, o ponto fica aberto e funcionário não consegue mais bater ponto
     const canBlock = type === TimeEntryType.CLOCK_IN; // Só pode bloquear ENTRADA
-    const shouldBlock = hasViolations && canBlock && company.complianceLevel === ComplianceLevel.FULL;
+    
+    // LÓGICA DE BLOQUEIO:
+    // - FULL: sempre bloqueia se tiver violações
+    // - CUSTOM: bloqueia APENAS se warnOnViolation = false (não está marcado "apenas avisar")
+    // - FLEXIBLE: nunca bloqueia
+    const shouldBlock = hasViolations && canBlock && (
+      company.complianceLevel === ComplianceLevel.FULL ||
+      (company.complianceLevel === ComplianceLevel.CUSTOM && !company.warnOnViolation)
+    );
     const shouldWarn = hasViolations && company.warnOnViolation;
 
     if (shouldBlock) {
@@ -410,6 +418,10 @@ export class ComplianceService {
       customOvertimeRate?: number;
       customHolidayRate?: number;
       warnOnViolation?: boolean;
+      enableTolerances?: boolean;
+      earlyEntryToleranceMinutes?: number;
+      lateExitToleranceMinutes?: number;
+      lateArrivalToleranceMinutes?: number;
     },
   ) {
     this.logger.log(`📝 [COMPLIANCE] Atualizando configurações da empresa ${companyId}`);
@@ -426,6 +438,10 @@ export class ComplianceService {
         customOvertimeRate: data.customOvertimeRate,
         customHolidayRate: data.customHolidayRate,
         warnOnViolation: data.warnOnViolation,
+        enableTolerances: data.enableTolerances,
+        earlyEntryToleranceMinutes: data.earlyEntryToleranceMinutes,
+        lateExitToleranceMinutes: data.lateExitToleranceMinutes,
+        lateArrivalToleranceMinutes: data.lateArrivalToleranceMinutes,
       },
     });
   }
@@ -446,6 +462,10 @@ export class ComplianceService {
         customOvertimeRate: true,
         customHolidayRate: true,
         warnOnViolation: true,
+        enableTolerances: true,
+        earlyEntryToleranceMinutes: true,
+        lateExitToleranceMinutes: true,
+        lateArrivalToleranceMinutes: true,
       },
     });
   }

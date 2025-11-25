@@ -4,9 +4,9 @@
 // - Menu dropdown com ícones
 // - Modais de confirmação para ações destrutivas
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Settings, Edit, UserX, Trash2, CameraOff, AlertTriangle, MessageSquare } from 'lucide-react'
+import { Settings, Edit, UserX, Trash2, CameraOff, AlertTriangle, MessageSquare, ScanFace } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -24,7 +24,9 @@ interface EmployeeActionsMenuProps {
   onDeactivate: (employee: Employee) => void
   onDelete: (employee: Employee) => void
   onDisableFaceRecognition?: (employee: Employee) => void
+  onRegisterFace?: (employee: Employee) => void
   hasFaceRegistered?: boolean
+  allowFacialRecognition?: boolean
 }
 
 export default function EmployeeActionsMenu({
@@ -33,7 +35,9 @@ export default function EmployeeActionsMenu({
   onDeactivate,
   onDelete,
   onDisableFaceRecognition,
+  onRegisterFace,
   hasFaceRegistered = false,
+  allowFacialRecognition = false,
 }: EmployeeActionsMenuProps) {
   const router = useRouter()
   const params = useParams<{ company?: string }>()
@@ -41,6 +45,8 @@ export default function EmployeeActionsMenu({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false)
   const [showDisableFaceConfirm, setShowDisableFaceConfirm] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<'bottom' | 'top'>('bottom')
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleEdit = () => {
     onEdit(employee)
@@ -61,6 +67,30 @@ export default function EmployeeActionsMenu({
     setShowDisableFaceConfirm(true)
     setShowMenu(false)
   }
+
+  const handleRegisterFace = () => {
+    if (onRegisterFace) {
+      onRegisterFace(employee)
+    }
+    setShowMenu(false)
+  }
+
+  // Detectar posição do menu ao abrir
+  useEffect(() => {
+    if (showMenu && buttonRef.current) {
+      const buttonRect = buttonRef.current.getBoundingClientRect()
+      const viewportHeight = window.innerHeight
+      const spaceBelow = viewportHeight - buttonRect.bottom
+      const menuHeight = 300 // Altura aproximada do menu
+      
+      // Se não tem espaço embaixo, abre para cima
+      if (spaceBelow < menuHeight && buttonRect.top > menuHeight) {
+        setMenuPosition('top')
+      } else {
+        setMenuPosition('bottom')
+      }
+    }
+  }, [showMenu])
 
   const handleSendMessage = async () => {
     setShowMenu(false)
@@ -113,6 +143,7 @@ export default function EmployeeActionsMenu({
     <>
       <div className="relative">
         <Button
+          ref={buttonRef}
           variant="ghost"
           size="sm"
           onClick={() => setShowMenu(!showMenu)}
@@ -130,7 +161,9 @@ export default function EmployeeActionsMenu({
             />
             
             {/* Menu dropdown - Ícone + texto curto */}
-            <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-lg shadow-lg z-50">
+            <div className={`absolute right-0 w-48 bg-card border border-border rounded-lg shadow-lg z-50 ${
+              menuPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
+            }`}>
               <div className="py-1">
                 <button
                   onClick={handleEdit}
@@ -150,15 +183,27 @@ export default function EmployeeActionsMenu({
                   Mensagem
                 </button>
 
-                {hasFaceRegistered && (
-                  <button
-                    onClick={handleDisableFaceRecognition}
-                    className="flex items-center w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                    title="Excluir Reconhecimento Facial"
-                  >
-                    <CameraOff className="h-4 w-4 mr-2" />
-                    Excluir
-                  </button>
+                {/* Botão de Face - Só aparece se allowFacialRecognition = true */}
+                {allowFacialRecognition && (
+                  hasFaceRegistered ? (
+                    <button
+                      onClick={handleDisableFaceRecognition}
+                      className="flex items-center w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                      title="Excluir Reconhecimento Facial"
+                    >
+                      <CameraOff className="h-4 w-4 mr-2" />
+                      Excluir
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleRegisterFace}
+                      className="flex items-center w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                      title="Cadastrar Reconhecimento Facial"
+                    >
+                      <ScanFace className="h-4 w-4 mr-2" />
+                      Cadastrar
+                    </button>
+                  )
                 )}
 
                 {employee.status === 'ACTIVE' ? (
