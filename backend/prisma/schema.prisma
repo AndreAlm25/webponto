@@ -50,6 +50,8 @@ model Company {
   warnOnViolation          Boolean         @default(true)
   dashboardShowRecentEntries Boolean       @default(true)
   dashboardRecentEntriesLimit Int          @default(10)
+  // Configurações do aplicativo
+  successMessageDuration   Int             @default(10) // Tempo em segundos da mensagem de sucesso no terminal
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
   address                  Address?        @relation("CompanyAddress")

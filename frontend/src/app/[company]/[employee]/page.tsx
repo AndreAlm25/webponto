@@ -493,18 +493,20 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
   const [showMessage, setShowMessage] = React.useState(false)
 
   // Verificar quais botões devem aparecer
-  // Ordenar por timestamp (mais recente primeiro)
-  const sortedEntries = [...todayEntries].sort((a, b) => 
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  // Ordenar por timestamp (mais antigo primeiro para facilitar a lógica)
+  const sortedEntriesAsc = [...todayEntries].sort((a, b) => 
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   )
   
-  // Encontrar o índice do último CLOCK_OUT
-  const lastClockOutIndex = sortedEntries.findIndex(e => e.type === 'CLOCK_OUT')
+  // Encontrar o índice do último CLOCK_OUT (procurando do fim para o início)
+  const lastClockOutIndex = sortedEntriesAsc.map(e => e.type).lastIndexOf('CLOCK_OUT')
   
   // Considerar apenas pontos APÓS o último CLOCK_OUT (ciclo atual)
+  // Se não há CLOCK_OUT, considerar todos os pontos
+  // Se há CLOCK_OUT, pegar apenas os pontos depois dele
   const currentCycleEntries = lastClockOutIndex >= 0 
-    ? sortedEntries.slice(0, lastClockOutIndex)
-    : sortedEntries
+    ? sortedEntriesAsc.slice(lastClockOutIndex + 1)
+    : sortedEntriesAsc
   
   const hasClockIn = currentCycleEntries.some(e => e.type === 'CLOCK_IN')
   const hasBreakStart = currentCycleEntries.some(e => e.type === 'BREAK_START')

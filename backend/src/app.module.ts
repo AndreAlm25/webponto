@@ -16,6 +16,7 @@ import { OvertimeModule } from './modules/overtime/overtime.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { DashboardConfigModule } from './modules/dashboard-config/dashboard-config.module';
+import { AppSettingsModule } from './modules/app-settings/app-settings.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { DashboardConfigModule } from './modules/dashboard-config/dashboard-conf
     AlertsModule,
     ComplianceModule,
     DashboardConfigModule,
+    AppSettingsModule,
     SeedModule,
     FilesModule,
   ],

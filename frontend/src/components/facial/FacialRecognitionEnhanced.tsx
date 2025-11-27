@@ -1057,153 +1057,45 @@ export default function FacialRecognitionEnhanced({
           decidedType = 'CLOCK_IN' // Fallback
         }
       } else {
-        // Admin: buscar último registro do funcionário RECONHECIDO
-        try {
-          // Buscar employeeId e dados do funcionário primeiro
-          const empResponse = await fetch(`/api/employees/public?email=${encodeURIComponent(recognizedUserId)}`)
-          
-          if (empResponse.ok) {
-            const empData = await empResponse.json()
-            const employeeId = empData.id
-            
-            // Extrair horários do funcionário para ponto automático
-            const employeeSchedule = {
-              workStart: empData.workingHoursStart || '08:00',
-              workEnd: empData.workingHoursEnd || '18:00',
-              breakStart: empData.breakStart || null,
-              breakEnd: empData.breakEnd || null
-            }
-            
-            // Função auxiliar para verificar se está próximo de um horário (30 min antes ou depois)
-            const isNearTime = (targetTime: string, toleranceMinutes: number = 30): boolean => {
-              if (!targetTime) return false
-              const now = new Date()
-              const [hours, minutes] = targetTime.split(':').map(Number)
-              const target = new Date()
-              target.setHours(hours, minutes, 0, 0)
-              const diffMinutes = Math.abs((now.getTime() - target.getTime()) / 60000)
-              return diffMinutes <= toleranceMinutes
-            }
-            
-            // Buscar último registro do dia
-            const tcResponse = await fetch(`/api/timeclock?employeeId=${employeeId}`, {
-              headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
-            })
-            
-            if (tcResponse.ok) {
-              const tcData = await tcResponse.json()
-              const records = Array.isArray(tcData) ? tcData : []
-              // API retorna ordenado por timestamp DESC, então o primeiro é o mais recente
-              const lastRecord = records.length > 0 ? records[0] : null
-              const lastType = lastRecord?.type ?? null
-              
-              if (!lastRecord || lastType === 'CLOCK_OUT') {
-                decidedType = 'CLOCK_IN'
-              } else if (lastType === 'CLOCK_IN') {
-                // Verificar se está próximo do horário de intervalo ou saída (ADMIN também)
-                if (employeeSchedule.breakStart && isNearTime(employeeSchedule.breakStart)) {
-                  decidedType = 'BREAK_START' // Automático
-                } else if (employeeSchedule.workEnd && isNearTime(employeeSchedule.workEnd)) {
-                  decidedType = 'CLOCK_OUT' // Automático
-                } else {
-                  // ambíguo: início de intervalo ou saída
-                  ambiguous = ['BREAK_START','CLOCK_OUT']
-                }
-              } else if (lastType === 'BREAK_START') {
-                // Verificar se está próximo do fim do intervalo
-                if (employeeSchedule.breakEnd && isNearTime(employeeSchedule.breakEnd)) {
-                  decidedType = 'BREAK_END' // Automático
-                } else {
-                  decidedType = 'BREAK_END'
-                }
-              } else if (lastType === 'BREAK_END') {
-                // Verificar se está próximo do horário de saída
-                if (employeeSchedule.workEnd && isNearTime(employeeSchedule.workEnd)) {
-                  decidedType = 'CLOCK_OUT' // Automático
-                } else {
-                  decidedType = 'CLOCK_OUT'
-                }
-              } else {
-                decidedType = 'CLOCK_IN'
-              }
-            } else {
-              decidedType = 'CLOCK_IN'
-            }
-          } else {
-            decidedType = 'CLOCK_IN'
-          }
-        } catch (e) {
-          decidedType = 'CLOCK_IN'
-        }
+        // Admin: o backend já decide o tipo automaticamente
+        // Não precisamos fazer nada aqui - o tipo vem no result.data.timeEntry.type
+        console.log('[PONTO] 🔄 Modo admin - backend decide o tipo automaticamente')
+        decidedType = null // Será preenchido pelo backend
       }
 
       if (ambiguous) {
-        
         // Manter câmera aberta e mostrar botões de escolha
         const choiceOptions = ambiguous.map((type: string) => ({
           type,
           label: type === 'BREAK_START' ? 'Início do Intervalo' : 'Saída'
         }))
         
-        // Buscar dados COMPLETOS do funcionário reconhecido (não usar dados do CompreFace)
-        let employeeFullData: any = {}
-        try {
-          const empResponse = await fetch(`/api/employees/public?email=${encodeURIComponent(recognizedUserId)}`)
-          if (empResponse.ok) {
-            employeeFullData = await empResponse.json()
-          }
-        } catch (e) {
-          console.warn('[AMBIGUIDADE] Erro ao buscar dados do funcionário:', e)
-        }
-        
         setAmbiguousChoice({
           options: choiceOptions,
           employee: {
-            email: recognizedUserId,
-            name: employeeFullData.name || '',
-            position: employeeFullData.position || '',
-            id: employeeFullData.id || '',
-            ...employeeFullData
+            email: recognizedUserId || '',
+            name: '',
+            position: '',
+            id: '',
           }
         })
         
-        setLoading(false) // Garantir que loading está false
-        
-        // Não mostrar feedback de overlay, apenas os botões
+        setLoading(false)
         recognitionInFlightRef.current = false
         return
       }
       
-      // Reconhecimento bem-sucedido - bater o ponto com decidedType
+      // Reconhecimento bem-sucedido
       decidedType = decidedType || 'CLOCK_IN'
-      
-      // Buscar employeeId pelo email reconhecido (necessário para admin)
-      let employeeId = null
-      if (authMode === 'admin') {
-        try {
-          const empResponse = await fetch(`/api/employees/public?email=${encodeURIComponent(recognizedUserId)}`)
-          if (empResponse.ok) {
-            const empData = await empResponse.json()
-            employeeId = empData.id
-          }
-        } catch (e) {
-          // Silenciar erro
-        }
-        
-        if (!employeeId) {
-          throw new Error('Funcionário não encontrado no sistema')
-        }
-      }
-      
-      console.log('[PONTO] 🎯 Tipo decidido pelo frontend:', decidedType)
-      console.log('[PONTO] 🎯 Tipo registrado pelo backend:', result.data?.timeEntry?.type)
       
       // Declarar clockResult fora do escopo
       let clockResult: any
       
-      // ⚠️ VERIFICAR SE O BACKEND JÁ REGISTROU
+      // ⚠️ VERIFICAR SE O BACKEND JÁ REGISTROU (o endpoint /api/time-entries/facial já registra o ponto)
       if (result.data?.timeEntry) {
-        console.log('[PONTO] ✅ Backend já registrou o ponto, pulando chamada para /api/timeclock')
+        console.log('[PONTO] ✅ Backend já registrou o ponto!')
+        console.log('[PONTO] 📋 timeEntry:', result.data.timeEntry)
+        console.log('[PONTO] 📋 employee:', result.data.timeEntry.employee)
         
         // Usar o ponto já registrado pelo backend
         clockResult = result.data.timeEntry
@@ -1222,50 +1114,27 @@ export default function FacialRecognitionEnhanced({
         // Pular para o sucesso
         decidedType = clockResult.type
       } else {
-        console.log('[PONTO] ⚠️ Backend NÃO registrou, fazendo chamada para /api/timeclock')
-        
-        // Montar body baseado no authMode
-        const clockBody = authMode === 'admin' 
-          ? { type: decidedType, employeeId, method: 'FACIAL_RECOGNITION' }  // Admin: precisa do employeeId
-          : { type: decidedType, method: 'FACIAL_RECOGNITION' }              // Employee: usa o token
-        
-        const clockResponse = await fetch('/api/timeclock', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
-          body: JSON.stringify(clockBody)
-        })
-        clockResult = await clockResponse.json()
-        if (!clockResponse.ok) {
-          throw new Error(clockResult.error || 'Erro ao registrar ponto')
-        }
-        
-        // ✅ SALVAR PONTO NO LOCALSTORAGE (persistir para próxima decisão)
-        try {
-          const pontosHoje = localStorage.getItem('pontos_hoje')
-          const records = pontosHoje ? JSON.parse(pontosHoje) : []
-          records.push(clockResult)
-          localStorage.setItem('pontos_hoje', JSON.stringify(records))
-          console.log('[TIMECLOCK] 💾 Ponto salvo no localStorage:', clockResult)
-        } catch (e) {
-          console.error('[TIMECLOCK] Erro ao salvar no localStorage:', e)
-        }
+        // Isso não deveria acontecer - o endpoint /api/time-entries/facial sempre registra o ponto
+        console.error('[PONTO] ❌ Backend não retornou timeEntry - isso não deveria acontecer!')
+        throw new Error('Erro interno: ponto não foi registrado pelo backend')
       }
       
       // Sucesso completo
-      // Buscar dados completos do funcionário RECONHECIDO (incluindo cargo)
+      // Usar dados do funcionário que vieram no clockResult (backend já retorna)
       let employeeData: any = {}
       
-      try {
-        // Buscar funcionário pelo email reconhecido usando API pública
-        const empResponse = await fetch(`/api/employees/public?email=${encodeURIComponent(recognizedUserId)}`)
-        if (empResponse.ok) {
-          employeeData = await empResponse.json()
+      // O backend retorna employee dentro do timeEntry
+      if (clockResult?.employee) {
+        const emp = clockResult.employee
+        employeeData = {
+          id: emp.id,
+          registrationId: emp.registrationId,
+          name: emp.user?.name || 'Funcionário',
+          avatarUrl: emp.user?.avatarUrl || null,
         }
-      } catch (e) {
-        // Silenciar erro
+        console.log('[RECOGNITION] 📋 Dados do funcionário extraídos do clockResult:', employeeData)
+      } else {
+        console.log('[RECOGNITION] ⚠️ clockResult não contém employee:', clockResult)
       }
       
       // Liberar câmera IMEDIATAMENTE (não esperar cleanup)
@@ -1322,24 +1191,13 @@ export default function FacialRecognitionEnhanced({
     if (!authMode || !ambiguousChoice) return
     
     try {
-      // Buscar token correto (priorizar 'token' que é o padrão do sistema)
+      // Buscar token correto
       const token = localStorage.getItem('token') || localStorage.getItem('employee_token') || undefined
       
-      // Buscar employeeId se for admin
-      let employeeId = null
-      if (authMode === 'admin') {
-        try {
-          const empResponse = await fetch(`/api/employees/public?email=${encodeURIComponent(ambiguousChoice.employee.email)}`)
-          if (empResponse.ok) {
-            const empData = await empResponse.json()
-            employeeId = empData.id
-          }
-        } catch (e) {
-          // Silenciar erro
-        }
-      }
+      // Usar o employeeId que já temos no ambiguousChoice
+      const employeeId = ambiguousChoice.employee?.id || null
       
-      const clockBody = authMode === 'admin'
+      const clockBody = authMode === 'admin' && employeeId
         ? { type: chosenType, employeeId, method: 'FACIAL_RECOGNITION' }
         : { type: chosenType, method: 'FACIAL_RECOGNITION' }
       
@@ -1358,13 +1216,12 @@ export default function FacialRecognitionEnhanced({
         throw new Error(clockResult.error || 'Erro ao registrar ponto')
       }
       
-      // ✅ SALVAR PONTO NO LOCALSTORAGE (persistir para próxima decisão)
+      // Salvar no localStorage
       try {
         const pontosHoje = localStorage.getItem('pontos_hoje')
         const records = pontosHoje ? JSON.parse(pontosHoje) : []
         records.push(clockResult)
         localStorage.setItem('pontos_hoje', JSON.stringify(records))
-        console.log('[TIMECLOCK] 💾 Ponto ambíguo salvo no localStorage:', clockResult)
       } catch (e) {
         console.error('[TIMECLOCK] Erro ao salvar no localStorage:', e)
       }

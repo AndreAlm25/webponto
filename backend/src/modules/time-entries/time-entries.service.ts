@@ -176,6 +176,11 @@ export class TimeEntriesService {
                   avatarUrl: true,
                 },
               },
+              position: {
+                select: {
+                  name: true,
+                },
+              },
             },
           },
         },

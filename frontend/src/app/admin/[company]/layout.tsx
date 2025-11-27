@@ -1,6 +1,6 @@
 "use client"
-import React, { useEffect } from 'react'
-import { notFound } from 'next/navigation'
+import React, { useEffect, useState } from 'react'
+import { notFound, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { ThemeToggle } from '@/components/theme-toggle'
 import UserProfileMenu from '@/components/admin/UserProfileMenu'
@@ -20,21 +20,12 @@ export default function CompanyAdminLayout({
 }) {
   const { user } = useAuth()
   const { company } = params
-  
-  // Log detalhado no layout
-  useEffect(() => {
-    console.log('📐 [Layout] Layout Admin carregado')
-    console.log('📐 [Layout] Slug recebido (params.company):', company)
-    console.log('📐 [Layout] Slug decodificado:', decodeURIComponent(company))
-    console.log('📐 [Layout] User data:', user)
-    console.log('📐 [Layout] User company:', (user as any)?.company)
-  }, [company, user])
-  
-  if (!company) notFound()
+  const pathname = usePathname()
 
+  // TODOS OS HOOKS DEVEM VIR ANTES DE QUALQUER RETORNO CONDICIONAL
+  
   // Estado do sidebar com persistência no localStorage
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(() => {
-    // Comentário: Carrega estado salvo do localStorage
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sidebarCollapsed')
       return saved === 'true'
@@ -42,13 +33,25 @@ export default function CompanyAdminLayout({
     return false
   })
   
-  // Comentário: Salva estado do sidebar no localStorage quando mudar
-  React.useEffect(() => {
+  // Salva estado do sidebar no localStorage quando mudar
+  useEffect(() => {
     localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  // Se for rota do terminal de ponto, renderiza sem layout de admin (fullscreen)
+  const isTerminal = pathname?.includes('/terminal-de-ponto')
   
   const companyName = decodeURIComponent(company)
   const sidebarWidth = sidebarCollapsed ? '64px' : '250px'
+
+  // Se for terminal de ponto, renderiza apenas o children (fullscreen, sem layout)
+  if (isTerminal) {
+    return (
+      <ProtectedRoute requireAuth={true}>
+        {children}
+      </ProtectedRoute>
+    )
+  }
 
   return (
     <ProtectedRoute requireAuth={true}>

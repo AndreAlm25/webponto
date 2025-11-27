@@ -292,9 +292,9 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 <span>Folha de Pagamento</span>
               </button>
               <button
-                onClick={() => router.push(`${base}/terminal`)}
+                onClick={() => router.push(`${base}/terminal-de-ponto`)}
                 className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/terminal`) ? 'bg-muted/50 font-medium' : ''
+                  isActive(`${base}/terminal-de-ponto`) ? 'bg-muted/50 font-medium' : ''
                 }`}
               >
                 <Clock className="h-3 w-3 mr-2" />
@@ -375,11 +375,11 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               </button>
               <button
                 onClick={() => {
-                  router.push(`${base}/terminal`)
+                  router.push(`${base}/terminal-de-ponto`)
                   setDropdownOpen(false)
                 }}
                 className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/terminal`) ? 'bg-muted/50 font-medium' : ''
+                  isActive(`${base}/terminal-de-ponto`) ? 'bg-muted/50 font-medium' : ''
                 }`}
               >
                 <Clock className="h-4 w-4 mr-2" />
@@ -454,6 +454,15 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 <Scale className="h-3 w-3 mr-2" />
                 <span>Conformidade CLT</span>
               </button>
+              <button
+                onClick={() => router.push(`${base}/configuracoes/aplicativo`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Settings className="h-3 w-3 mr-2" />
+                <span>Aplicativo</span>
+              </button>
             </div>
           )}
 
@@ -493,6 +502,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               >
                 <Scale className="h-4 w-4 mr-2" />
                 <span>Conformidade CLT</span>
+              </button>
+              <button
+                onClick={() => {
+                  router.push(`${base}/configuracoes/aplicativo`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                <span>Aplicativo</span>
               </button>
             </div>
           )}
