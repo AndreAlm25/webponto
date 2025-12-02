@@ -113,15 +113,14 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
           }))
         }
         
-        // Buscar registros de hoje
+        // Buscar registros de hoje (usar data local, não UTC)
         const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const todayISO = today.toISOString()
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
         
         console.log('📊 [Stats] Buscando registros de hoje...')
-        console.log('📊 [Stats] Data hoje (ISO):', todayISO)
+        console.log('📊 [Stats] Data hoje (local):', todayStr)
         
-        const entriesUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&startDate=${todayISO}`
+        const entriesUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&startDate=${todayStr}&endDate=${todayStr}`
         console.log('📊 [Stats] URL:', entriesUrl)
         
         const entriesRes = await fetch(entriesUrl, { headers: { Authorization: `Bearer ${token}` } })

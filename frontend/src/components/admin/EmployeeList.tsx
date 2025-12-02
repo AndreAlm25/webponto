@@ -298,7 +298,7 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
           isOpen={true}
           onClose={() => setEditingEmployeeId(null)}
           onEmployeeUpdated={handleEmployeeUpdated}
-          companyId={user?.companyId || ''}
+          companyId={String(user?.companyId || '')}
           employeeId={editingEmployeeId}
         />
       )}

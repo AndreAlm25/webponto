@@ -42,7 +42,7 @@ interface Stats {
 export default function OvertimePage() {
   const params = useParams<{ company: string }>()
   const { company } = params
-  const { companyId, loading, error } = useCompanySlug(company)
+  const { companyId, loading } = useCompanySlug()
   
   const [entries, setEntries] = useState<OvertimeEntry[]>([])
   const [stats, setStats] = useState<Stats>({ pending: 0, approved: 0, rejected: 0, total: 0 })
@@ -207,10 +207,6 @@ export default function OvertimePage() {
 
   if (loading) {
     return <div className="p-6">Carregando...</div>
-  }
-
-  if (error) {
-    return <SlugMismatchError expectedSlug={company} />
   }
 
   return (

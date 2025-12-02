@@ -182,8 +182,9 @@ export class TimeEntriesController {
       throw new UnauthorizedException('Empresa não identificada');
     }
 
-    const inicio = startDate ? new Date(startDate) : undefined;
-    const fim = endDate ? new Date(endDate) : undefined;
+    // Adicionar horário para evitar problemas de timezone
+    const inicio = startDate ? new Date(startDate + 'T00:00:00') : undefined;
+    const fim = endDate ? new Date(endDate + 'T23:59:59') : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
 
     return await this.timeEntriesService.listarTodosRegistros(
@@ -213,9 +214,10 @@ export class TimeEntriesController {
       throw new UnauthorizedException('Empresa não identificada');
     }
 
-    // Converter strings de data para Date, adicionando 'T00:00:00' para evitar problemas de timezone
-    const inicio = dataInicio ? new Date(dataInicio + 'T00:00:00') : undefined;
-    const fim = dataFim ? new Date(dataFim + 'T23:59:59') : undefined;
+    // Converter strings de data para Date em UTC para evitar problemas de timezone
+    // Usar horário de Brasília (UTC-3) para início e fim do dia
+    const inicio = dataInicio ? new Date(dataInicio + 'T00:00:00-03:00') : undefined;
+    const fim = dataFim ? new Date(dataFim + 'T23:59:59-03:00') : undefined;
 
     return await this.timeEntriesService.listarPontos(
       employeeId,

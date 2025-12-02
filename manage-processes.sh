@@ -217,6 +217,13 @@ check_ports() {
     read -p "Pressione ENTER para continuar..."
 }
 
+# Função para abrir menu interativo de seeds
+manage_seeds() {
+    echo -e "${YELLOW}🌱 Abrindo menu interativo de Seeds...${NC}"
+    cd /root/Apps/webponto/backend
+    npm run seed
+}
+
 # Função para iniciar serviços
 start_services() {
     echo -e "${CYAN}${BOLD}🚀 Iniciando serviços do WebPonto${NC}\n"
@@ -284,6 +291,7 @@ main_menu() {
             echo -e "${GREEN}[A]${NC} Matar TODOS os processos"
             echo -e "${GREEN}[P]${NC} Verificar portas"
             echo -e "${GREEN}[S]${NC} Iniciar serviços"
+            echo -e "${GREEN}[D]${NC} 🌱 Seeds (dados de teste)"
             echo -e "${GREEN}[R]${NC} Atualizar lista"
             echo -e "${GREEN}[Q]${NC} Sair"
             echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -311,6 +319,10 @@ main_menu() {
                     show_header
                     start_services
                     ;;
+                [Dd])
+                    show_header
+                    manage_seeds
+                    ;;
                 [Rr])
                     continue
                     ;;
@@ -329,6 +341,7 @@ main_menu() {
             echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo -e "${BOLD}Opções:${NC}"
             echo -e "${GREEN}[S]${NC} Iniciar serviços"
+            echo -e "${GREEN}[D]${NC} 🌱 Seeds (dados de teste)"
             echo -e "${GREEN}[P]${NC} Verificar portas"
             echo -e "${GREEN}[R]${NC} Atualizar lista"
             echo -e "${GREEN}[Q]${NC} Sair"
@@ -340,6 +353,10 @@ main_menu() {
                 [Ss])
                     show_header
                     start_services
+                    ;;
+                [Dd])
+                    show_header
+                    manage_seeds
                     ;;
                 [Pp])
                     show_header

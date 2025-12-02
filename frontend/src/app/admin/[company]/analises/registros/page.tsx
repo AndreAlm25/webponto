@@ -28,7 +28,12 @@ export default function RegistrosPage() {
   
   const [entries, setEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+  // Usar data local, não UTC
+const getLocalDateString = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString())
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all')
   const [employees, setEmployees] = useState<any[]>([])
   const [stats, setStats] = useState({
@@ -139,7 +144,9 @@ export default function RegistrosPage() {
       console.log('🆕 [WebSocket Registros] Nome:', timeEntry.employee?.user?.name)
       
       // Verificar se o registro pertence ao filtro atual
-      const entryDate = new Date(timeEntry.timestamp).toISOString().split('T')[0]
+      // Converter para data local do navegador
+const entryDateObj = new Date(timeEntry.timestamp)
+const entryDate = `${entryDateObj.getFullYear()}-${String(entryDateObj.getMonth() + 1).padStart(2, '0')}-${String(entryDateObj.getDate()).padStart(2, '0')}`
       const matchesDate = entryDate === selectedDate
       const matchesEmployee = selectedEmployee === 'all' || timeEntry.employeeId === selectedEmployee
       

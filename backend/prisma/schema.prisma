@@ -66,6 +66,12 @@ model Company {
   positions                Position[]
   timeEntries              TimeEntry[]
   users                    User[]
+  payrolls                 Payroll[]
+  payslips                 Payslip[]
+  payrollConfig            PayrollConfig?
+  customBenefits           CustomBenefit[]
+  paymentGroups            PaymentGroup[]
+  advances                 Advance[]
 
   @@map("companies")
 }
@@ -85,7 +91,7 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sentMessages Message[]
-  company      Company   @relation(fields: [companyId], references: [id])
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("users")
@@ -129,15 +135,20 @@ model Employee {
   geofenceId             String?         @db.Uuid
   address                Address?        @relation("EmployeeAddress")
   contactInfo            ContactInfo?    @relation("EmployeeContactInfo")
-  company                Company         @relation(fields: [companyId], references: [id])
-  department             Department?     @relation(fields: [departmentId], references: [id])
-  geofence               Geofence?       @relation(fields: [geofenceId], references: [id])
-  position               Position?       @relation(fields: [positionId], references: [id])
+  company                Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department             Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  geofence               Geofence?       @relation(fields: [geofenceId], references: [id], onDelete: SetNull)
+  position               Position?       @relation(fields: [positionId], references: [id], onDelete: SetNull)
   faceProfiles           FaceProfile[]
   messageThreads         MessageThread[]
   messages               Message[]
   sentMessages           Message[]       @relation("SenderEmployee")
   timeEntries            TimeEntry[]
+  payslips               Payslip[]
+  benefits               EmployeeBenefit[]
+  advances               Advance[]
+  paymentGroupId         String?         @db.Uuid
+  paymentGroup           PaymentGroup?   @relation(fields: [paymentGroupId], references: [id], onDelete: SetNull)
   user                   User?
 
   @@unique([companyId, registrationId])
@@ -188,7 +199,7 @@ model TimeEntry {
   restHours           Float?          // Horas de descanso que teve
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
-  company             Company         @relation(fields: [companyId], references: [id])
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee            Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId, timestamp])
@@ -207,7 +218,7 @@ model Geofence {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   employees    Employee[]
-  company      Company    @relation(fields: [companyId], references: [id])
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, active])
   @@map("geofences")
@@ -222,7 +233,7 @@ model Notification {
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
-  company   Company          @relation(fields: [companyId], references: [id])
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
 }
@@ -234,7 +245,7 @@ model Position {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   employees Employee[]
-  company   Company    @relation(fields: [companyId], references: [id])
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([name, companyId])
   @@map("positions")
@@ -246,7 +257,7 @@ model Department {
   companyId String     @db.Uuid
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-  company   Company    @relation(fields: [companyId], references: [id])
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employees Employee[]
 
   @@unique([name, companyId])
@@ -264,8 +275,8 @@ model FaceProfile {
   lastSyncAt DateTime?
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
-  company    Company           @relation(fields: [companyId], references: [id])
-  employee   Employee          @relation(fields: [employeeId], references: [id])
+  company    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee   Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([provider, subjectId, companyId])
   @@index([employeeId, companyId])
@@ -280,7 +291,7 @@ model MessageThread {
   status     ThreadStatus @default(OPEN)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
-  company    Company      @relation(fields: [companyId], references: [id])
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   messages   Message[]
 
@@ -302,11 +313,11 @@ model Message {
   readAt           DateTime?
   createdAt        DateTime            @default(now())
   attachments      MessageAttachment[]
-  company          Company             @relation(fields: [companyId], references: [id])
+  company          Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee         Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   senderEmployee   Employee?           @relation("SenderEmployee", fields: [senderEmployeeId], references: [id], onDelete: Cascade)
-  senderUser       User?               @relation(fields: [senderUserId], references: [id])
-  thread           MessageThread       @relation(fields: [threadId], references: [id])
+  senderUser       User?               @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  thread           MessageThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@index([threadId, createdAt])
   @@index([employeeId, createdAt])
@@ -323,7 +334,7 @@ model MessageAttachment {
   thumbnailUrl String?  // URL da thumbnail (para PDFs)
   pageCount    Int?     // Número de páginas (para PDFs)
   createdAt    DateTime @default(now())
-  message      Message  @relation(fields: [messageId], references: [id])
+  message      Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@map("message_attachments")
 }
@@ -337,7 +348,7 @@ model ContactInfo {
   allowWhatsappNotifications Boolean   @default(false)
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
-  company                    Company?  @relation("CompanyContactInfo", fields: [companyId], references: [id])
+  company                    Company?  @relation("CompanyContactInfo", fields: [companyId], references: [id], onDelete: Cascade)
   employee                   Employee? @relation("EmployeeContactInfo", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("contact_info")
@@ -357,19 +368,19 @@ model Address {
   reference  String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  company    Company?  @relation("CompanyAddress", fields: [companyId], references: [id])
+  company    Company?  @relation("CompanyAddress", fields: [companyId], references: [id], onDelete: Cascade)
   employee   Employee? @relation("EmployeeAddress", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("addresses")
 }
 
 enum Role {
-  SUPER_ADMIN
-  COMPANY_ADMIN
-  MANAGER
-  HR
-  EMPLOYEE
-  FINANCIAL
+  SUPER_ADMIN # Super Admin
+  COMPANY_ADMIN # Admin da Empresa
+  MANAGER # Gerente
+  HR # Recursos Humanos
+  EMPLOYEE # Funcionário
+  FINANCIAL # Financeiro
 }
 
 enum TimeEntryType {
@@ -463,4 +474,360 @@ enum OvertimeType {
   BEFORE    // Antes do expediente
   AFTER     // Depois do expediente
   HOLIDAY   // Feriado/DSR
+}
+
+// ==========================================
+// FOLHA DE PAGAMENTO (Payroll)
+// ==========================================
+
+// Folha de pagamento mensal da empresa
+model Payroll {
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @db.Uuid
+  referenceMonth  Int           // Mês de referência (1-12)
+  referenceYear   Int           // Ano de referência
+  status          PayrollStatus @default(DRAFT)
+  totalGross      Decimal       @default(0) @db.Decimal(12, 2) // Total bruto
+  totalDeductions Decimal       @default(0) @db.Decimal(12, 2) // Total descontos
+  totalNet        Decimal       @default(0) @db.Decimal(12, 2) // Total líquido
+  totalEmployees  Int           @default(0)                     // Qtd funcionários
+  closedAt        DateTime?                                     // Data de fechamento
+  closedBy        String?       @db.Uuid                        // Quem fechou
+  paidAt          DateTime?                                     // Data de pagamento
+  notes           String?                                       // Observações
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payslips        Payslip[]
+
+  @@unique([companyId, referenceMonth, referenceYear])
+  @@index([companyId, referenceYear, referenceMonth])
+  @@map("payrolls")
+}
+
+// Holerite individual do funcionário
+model Payslip {
+  id                  String        @id @default(uuid()) @db.Uuid
+  payrollId           String        @db.Uuid
+  employeeId          String        @db.Uuid
+  companyId           String        @db.Uuid
+  referenceMonth      Int           // Mês de referência
+  referenceYear       Int           // Ano de referência
+  status              PayslipStatus @default(PENDING)
+  
+  // Dados do funcionário no momento (snapshot)
+  employeeName        String
+  employeePosition    String?
+  employeeDepartment  String?
+  employeeRegistration String       // Matrícula
+  
+  // Salário base
+  baseSalary          Decimal       @db.Decimal(10, 2)
+  
+  // Proventos (earnings / rendimentos)
+  workedDays          Int           @default(0)  // Dias trabalhados
+  workedHours         Decimal       @default(0) @db.Decimal(6, 2) // Horas trabalhadas
+  overtimeHours50     Decimal       @default(0) @db.Decimal(6, 2) // Horas extras 50%
+  overtimeValue50     Decimal       @default(0) @db.Decimal(10, 2)
+  overtimeHours100    Decimal       @default(0) @db.Decimal(6, 2) // Horas extras 100%
+  overtimeValue100    Decimal       @default(0) @db.Decimal(10, 2)
+  nightShiftHours     Decimal       @default(0) @db.Decimal(6, 2) // Horas noturnas
+  nightShiftValue     Decimal       @default(0) @db.Decimal(10, 2)
+  hazardPay           Decimal       @default(0) @db.Decimal(10, 2) // Periculosidade
+  unhealthyPay        Decimal       @default(0) @db.Decimal(10, 2) // Insalubridade
+  bonus               Decimal       @default(0) @db.Decimal(10, 2) // Bônus/Gratificações
+  otherEarnings       Decimal       @default(0) @db.Decimal(10, 2) // Outros proventos
+  otherEarningsDesc   String?                                       // Descrição outros proventos
+  totalEarnings       Decimal       @default(0) @db.Decimal(12, 2) // Total proventos
+  
+  // Descontos (deductions)
+  absenceDays         Int           @default(0)  // Dias de falta
+  absenceValue        Decimal       @default(0) @db.Decimal(10, 2)
+  lateMinutes         Int           @default(0)  // Minutos de atraso
+  lateValue           Decimal       @default(0) @db.Decimal(10, 2)
+  inssBase            Decimal       @default(0) @db.Decimal(10, 2) // Base INSS
+  inssValue           Decimal       @default(0) @db.Decimal(10, 2) // Desconto INSS
+  inssRate            Decimal       @default(0) @db.Decimal(5, 2)  // Alíquota INSS
+  irBase              Decimal       @default(0) @db.Decimal(10, 2) // Base IR
+  irValue             Decimal       @default(0) @db.Decimal(10, 2) // Desconto IR
+  irRate              Decimal       @default(0) @db.Decimal(5, 2)  // Alíquota IR
+  transportVoucher    Decimal       @default(0) @db.Decimal(10, 2) // Vale-transporte (6%)
+  mealVoucher         Decimal       @default(0) @db.Decimal(10, 2) // Vale-refeição
+  healthInsurance     Decimal       @default(0) @db.Decimal(10, 2) // Plano de saúde
+  dentalInsurance     Decimal       @default(0) @db.Decimal(10, 2) // Plano odontológico
+  unionContribution   Decimal       @default(0) @db.Decimal(10, 2) // Contribuição sindical
+  loanDeduction       Decimal       @default(0) @db.Decimal(10, 2) // Empréstimo consignado
+  advancePayment      Decimal       @default(0) @db.Decimal(10, 2) // Adiantamento
+  otherDeductions     Decimal       @default(0) @db.Decimal(10, 2) // Outros descontos
+  otherDeductionsDesc String?                                       // Descrição outros descontos
+  totalDeductions     Decimal       @default(0) @db.Decimal(12, 2) // Total descontos
+  
+  // FGTS (não desconta do funcionário, mas é obrigação da empresa)
+  fgtsBase            Decimal       @default(0) @db.Decimal(10, 2)
+  fgtsValue           Decimal       @default(0) @db.Decimal(10, 2) // 8% do salário
+  
+  // Totais
+  grossSalary         Decimal       @default(0) @db.Decimal(12, 2) // Salário bruto
+  netSalary           Decimal       @default(0) @db.Decimal(12, 2) // Salário líquido
+  
+  // Controle
+  calculatedAt        DateTime?                                     // Quando foi calculado
+  approvedAt          DateTime?                                     // Quando foi aprovado
+  approvedBy          String?       @db.Uuid                        // Quem aprovou
+  paidAt              DateTime?                                     // Quando foi pago
+  notes               String?                                       // Observações
+  
+  // Adiantamentos (descontados neste holerite)
+  salaryAdvanceValue  Decimal       @default(0) @db.Decimal(10, 2)  // Adiantamento salarial (% automático)
+  extraAdvanceValue   Decimal       @default(0) @db.Decimal(10, 2)  // Vales avulsos (sob demanda)
+  
+  // Assinatura digital do funcionário
+  viewedAt            DateTime?                                     // Data/hora que visualizou o holerite
+  scrolledToEnd       Boolean       @default(false)                 // Rolou até o final (obrigatório para assinar)
+  scrolledAt          DateTime?                                     // Data/hora que rolou até o final
+  signedAt            DateTime?                                     // Data/hora da assinatura
+  signedByIp          String?                                       // IP do dispositivo
+  signedByDevice      String?                                       // User-Agent (dispositivo)
+  documentHash        String?                                       // Hash SHA-256 do holerite
+  signatureTerms      Boolean       @default(false)                 // Aceitou os termos
+  pdfPath             String?                                       // Caminho do PDF no MinIO
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  company             Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee            Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payroll             Payroll       @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  customBenefits      PayslipBenefit[]
+  discountedAdvances  Advance[]                                     // Adiantamentos descontados
+
+  @@unique([payrollId, employeeId])
+  @@index([companyId, referenceYear, referenceMonth])
+  @@index([employeeId, referenceYear, referenceMonth])
+  @@map("payslips")
+}
+
+// Status da folha de pagamento
+enum PayrollStatus {
+  DRAFT       // Rascunho - em elaboração
+  CALCULATING // Calculando
+  REVIEW      // Em revisão
+  APPROVED    // Aprovada
+  PAID        // Paga
+  CANCELLED   // Cancelada
+}
+
+// Status do holerite individual
+enum PayslipStatus {
+  PENDING     // Pendente de cálculo
+  CALCULATED  // Calculado
+  APPROVED    // Aprovado
+  PAID        // Pago
+  CANCELLED   // Cancelado
+}
+
+// ==========================================
+// CONFIGURAÇÕES DE FOLHA DE PAGAMENTO
+// ==========================================
+
+// Configurações de folha de pagamento da empresa
+model PayrollConfig {
+  id                    String        @id @default(uuid()) @db.Uuid
+  companyId             String        @unique @db.Uuid
+  
+  // Tipo de pagamento
+  paymentFrequency      PaymentFrequency @default(MONTHLY) // Mensal, Quinzenal, Semanal
+  paymentDay1           Int           @default(5)          // Primeiro dia de pagamento
+  paymentDay2           Int?                               // Segundo dia (se quinzenal)
+  paymentDayOfWeek      Int?                               // Dia da semana (0=Dom, 1=Seg... 6=Sáb) se semanal
+  
+  // Encargos obrigatórios (ativar/desativar)
+  enableInss            Boolean       @default(true)       // Desconta INSS do funcionário
+  enableIrrf            Boolean       @default(true)       // Desconta IRRF do funcionário
+  enableFgts            Boolean       @default(true)       // Empresa paga FGTS (8%)
+  
+  // Adicional Noturno (22h às 05h = +20%)
+  enableNightShift      Boolean       @default(true)       // Habilitar adicional noturno
+  nightShiftStart       String        @default("22:00")    // Início do horário noturno
+  nightShiftEnd         String        @default("05:00")    // Fim do horário noturno
+  nightShiftPercentage  Decimal       @default(20) @db.Decimal(5, 2) // % adicional noturno
+  
+  // Adiantamento Salarial (Vale Fixo - % automático)
+  enableSalaryAdvance   Boolean       @default(false)      // Habilitar adiantamento salarial
+  salaryAdvanceDay      Int?                               // Dia do adiantamento
+  salaryAdvancePercentage Decimal?    @db.Decimal(5, 2)    // % do salário (ex: 40)
+  
+  // Vale Avulso (Sob Demanda - valor fixo)
+  enableExtraAdvance    Boolean       @default(false)      // Habilitar vale avulso
+  maxExtraAdvancePercentage Decimal?  @db.Decimal(5, 2)    // Limite máximo % do salário (ex: 50)
+  
+  // Benefícios padrão (ativar/desativar)
+  enableTransportVoucher Boolean      @default(true)       // Vale-transporte (6%)
+  transportVoucherRate  Decimal       @default(6) @db.Decimal(5, 2) // % desconto VT
+  enableMealVoucher     Boolean       @default(false)      // Vale-refeição
+  mealVoucherValue      Decimal       @default(0) @db.Decimal(10, 2) // Valor VR
+  mealVoucherDiscount   Decimal       @default(0) @db.Decimal(5, 2)  // % desconto VR
+  enableHealthInsurance Boolean       @default(false)      // Plano de saúde
+  healthInsuranceValue  Decimal       @default(0) @db.Decimal(10, 2) // Valor plano
+  enableDentalInsurance Boolean       @default(false)      // Plano odontológico
+  dentalInsuranceValue  Decimal       @default(0) @db.Decimal(10, 2) // Valor plano
+  
+  // 13º e Férias
+  enable13thSalary      Boolean       @default(true)       // Paga 13º salário
+  enableVacationBonus   Boolean       @default(true)       // Paga 1/3 de férias
+  
+  // Configurações de cálculo (padrão/fallback)
+  workDaysPerMonth      Int           @default(22)         // Dias úteis por mês (padrão)
+  workHoursPerDay       Decimal       @default(8) @db.Decimal(4, 2) // Horas por dia (padrão)
+  
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  
+  company               Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@map("payroll_configs")
+}
+
+// Benefícios personalizados da empresa
+model CustomBenefit {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @db.Uuid
+  name        String                                      // Nome do benefício (ex: "Ajuda Aluguel")
+  description String?                                     // Descrição opcional
+  value       Decimal   @db.Decimal(10, 2)                // Valor do benefício
+  type        BenefitType @default(EARNING)               // Provento ou Desconto
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employees   EmployeeBenefit[]
+  payslipBenefits PayslipBenefit[]
+  
+  @@unique([companyId, name])
+  @@map("custom_benefits")
+}
+
+// Vínculo funcionário-benefício (quem recebe qual benefício)
+model EmployeeBenefit {
+  id          String    @id @default(uuid()) @db.Uuid
+  employeeId  String    @db.Uuid
+  benefitId   String    @db.Uuid
+  customValue Decimal?  @db.Decimal(10, 2)                // Valor personalizado (se diferente do padrão)
+  active      Boolean   @default(true)
+  startDate   DateTime  @default(now())                   // Quando começou a receber
+  endDate     DateTime?                                   // Quando parou (null = ativo)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  benefit     CustomBenefit @relation(fields: [benefitId], references: [id], onDelete: Cascade)
+  
+  @@unique([employeeId, benefitId])
+  @@map("employee_benefits")
+}
+
+// Benefícios aplicados no holerite (histórico)
+model PayslipBenefit {
+  id          String    @id @default(uuid()) @db.Uuid
+  payslipId   String    @db.Uuid
+  benefitId   String    @db.Uuid
+  name        String                                      // Nome do benefício (snapshot)
+  value       Decimal   @db.Decimal(10, 2)                // Valor aplicado
+  type        BenefitType                                 // Provento ou Desconto
+  createdAt   DateTime  @default(now())
+  
+  payslip     Payslip   @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  benefit     CustomBenefit @relation(fields: [benefitId], references: [id], onDelete: Cascade)
+  
+  @@map("payslip_benefits")
+}
+
+// Frequência de pagamento
+enum PaymentFrequency {
+  WEEKLY      // Semanal
+  BIWEEKLY    // Quinzenal
+  MONTHLY     // Mensal
+}
+
+// Tipo de benefício
+enum BenefitType {
+  EARNING     // Provento (adiciona ao salário)
+  DEDUCTION   // Desconto (subtrai do salário)
+}
+
+// ==========================================
+// GRUPOS DE PAGAMENTO
+// ==========================================
+
+// Grupos de pagamento (funcionários com datas diferentes)
+model PaymentGroup {
+  id                    String    @id @default(uuid()) @db.Uuid
+  companyId             String    @db.Uuid
+  name                  String                                      // Nome do grupo (ex: "Administrativo", "Operacional")
+  description           String?                                     // Descrição opcional
+  paymentDay1           Int                                         // Primeiro dia de pagamento
+  paymentDay2           Int?                                        // Segundo dia (se quinzenal)
+  advanceDay            Int?                                        // Dia do adiantamento salarial
+  advancePercentage     Decimal?  @db.Decimal(5, 2)                 // % do adiantamento (ex: 40)
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employees             Employee[]
+  
+  @@unique([companyId, name])
+  @@map("payment_groups")
+}
+
+// ==========================================
+// ADIANTAMENTOS E VALES
+// ==========================================
+
+// Tipo de adiantamento
+enum AdvanceType {
+  SALARY_ADVANCE  // Adiantamento salarial automático (% do salário)
+  EXTRA_ADVANCE   // Vale avulso sob demanda (valor fixo)
+}
+
+// Status do adiantamento
+enum AdvanceStatus {
+  PENDING     // Aguardando aprovação
+  APPROVED    // Aprovado
+  PAID        // Pago ao funcionário
+  DISCOUNTED  // Descontado no holerite
+  REJECTED    // Rejeitado
+}
+
+// Adiantamentos e vales
+model Advance {
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @db.Uuid
+  employeeId      String        @db.Uuid
+  type            AdvanceType                                       // SALARY_ADVANCE ou EXTRA_ADVANCE
+  amount          Decimal       @db.Decimal(10, 2)                  // Valor do adiantamento
+  percentage      Decimal?      @db.Decimal(5, 2)                   // % do salário (só para SALARY_ADVANCE)
+  referenceMonth  Int                                               // Mês de referência
+  referenceYear   Int                                               // Ano de referência
+  requestDate     DateTime      @default(now())                     // Data da solicitação
+  paymentDate     DateTime?                                         // Data do pagamento
+  status          AdvanceStatus @default(PENDING)
+  reason          String?                                           // Motivo (para EXTRA_ADVANCE)
+  approvedById    String?       @db.Uuid                            // Quem aprovou
+  approvedAt      DateTime?                                         // Data da aprovação
+  rejectedReason  String?                                           // Motivo da rejeição
+  payslipId       String?       @db.Uuid                            // Holerite onde foi descontado
+  notes           String?                                           // Observações
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payslip         Payslip?      @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+  
+  @@index([companyId, referenceYear, referenceMonth])
+  @@index([employeeId, referenceYear, referenceMonth])
+  @@index([status])
+  @@map("advances")
 }

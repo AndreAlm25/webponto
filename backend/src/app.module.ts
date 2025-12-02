@@ -17,6 +17,7 @@ import { AlertsModule } from './modules/alerts/alerts.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { DashboardConfigModule } from './modules/dashboard-config/dashboard-config.module';
 import { AppSettingsModule } from './modules/app-settings/app-settings.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AppSettingsModule } from './modules/app-settings/app-settings.module';
     ComplianceModule,
     DashboardConfigModule,
     AppSettingsModule,
+    PayrollModule,
     SeedModule,
     FilesModule,
   ],

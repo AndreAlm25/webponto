@@ -303,7 +303,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onEmployeeAdded, com
 
           const uploadData = await uploadRes.json()
           console.log('[AddEmployeeModal] Upload concluído:', uploadData)
-        } catch (e) {
+        } catch (e: any) {
           console.error('[AddEmployeeModal] Erro ao fazer upload do avatar:', e)
           toast.error('Avatar não foi salvo: ' + (e?.message || 'Erro desconhecido'))
         }

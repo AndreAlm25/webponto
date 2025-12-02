@@ -2,7 +2,7 @@
 // Sidebar do Admin (código em inglês; textos em português)
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp, List, Monitor } from 'lucide-react'
+import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp, List, Monitor, Wallet } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
@@ -292,6 +292,15 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 <span>Folha de Pagamento</span>
               </button>
               <button
+                onClick={() => router.push(`${base}/vales`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/vales`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Wallet className="h-3 w-3 mr-2" />
+                <span>Vales</span>
+              </button>
+              <button
                 onClick={() => router.push(`${base}/terminal-de-ponto`)}
                 className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
                   isActive(`${base}/terminal-de-ponto`) ? 'bg-muted/50 font-medium' : ''
@@ -375,6 +384,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               </button>
               <button
                 onClick={() => {
+                  router.push(`${base}/vales`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/vales`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                <span>Vales</span>
+              </button>
+              <button
+                onClick={() => {
                   router.push(`${base}/terminal-de-ponto`)
                   setDropdownOpen(false)
                 }}
@@ -446,6 +467,15 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 <span>Dashboard</span>
               </button>
               <button
+                onClick={() => router.push(`${base}/configuracoes/folha-pagamento`)}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <FileText className="h-3 w-3 mr-2" />
+                <span>Folha de Pagamento</span>
+              </button>
+              <button
                 onClick={() => router.push(`${base}/configuracoes/conformidade`)}
                 className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
                   isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
@@ -490,6 +520,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               >
                 <Monitor className="h-4 w-4 mr-2" />
                 <span>Dashboard</span>
+              </button>
+              <button
+                onClick={() => {
+                  router.push(`${base}/configuracoes/folha-pagamento`)
+                  setDropdownOpen(false)
+                }}
+                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                  isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                }`}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                <span>Folha de Pagamento</span>
               </button>
               <button
                 onClick={() => {

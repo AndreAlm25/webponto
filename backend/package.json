@@ -21,7 +21,15 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "seed": "ts-node prisma/seeds/index.ts",
+    "seed:reset": "ts-node prisma/seeds/index.ts 0",
+    "seed:base": "ts-node prisma/seeds/index.ts 1",
+    "seed:config": "ts-node prisma/seeds/index.ts 2",
+    "seed:time": "ts-node prisma/seeds/index.ts 3",
+    "seed:payroll": "ts-node prisma/seeds/index.ts 4",
+    "seed:advances": "ts-node prisma/seeds/index.ts 5",
+    "seed:all": "ts-node prisma/seeds/index.ts A"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -37,6 +45,7 @@
     "@nestjs/platform-socket.io": "^10.4.20",
     "@nestjs/websockets": "^10.4.20",
     "@prisma/client": "^6.18.0",
+    "@types/pdfkit": "^0.17.4",
     "axios": "^1.6.5",
     "bcrypt": "^5.1.1",
     "bull": "^4.12.0",
@@ -53,6 +62,7 @@
     "passport-local": "^1.0.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.8.69",
+    "pdfkit": "^0.17.2",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
     "sharp": "^0.34.4",
