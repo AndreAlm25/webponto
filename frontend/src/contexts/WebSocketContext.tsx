@@ -37,6 +37,7 @@ interface WebSocketContextType {
   onFaceRegistered: (callback: (data: { employeeId: string }) => void) => () => void
   onFaceDeleted: (callback: (data: { employeeId: string }) => void) => () => void
   onDashboardConfigUpdated: (callback: (config: DashboardConfig) => void) => () => void
+  onPermissionsUpdated: (callback: (data: { userId: string, role: string }) => void) => () => void
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null)
@@ -193,6 +194,13 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     [registerListener]
   )
 
+  const onPermissionsUpdated = useCallback(
+    (callback: (data: { userId: string, role: string }) => void) => {
+      return registerListener('permissions-updated', callback)
+    },
+    [registerListener]
+  )
+
   const value: WebSocketContextType = {
     socket,
     connected,
@@ -205,6 +213,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     onFaceRegistered,
     onFaceDeleted,
     onDashboardConfigUpdated,
+    onPermissionsUpdated,
   }
 
   return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>

@@ -7,6 +7,7 @@
 
 import { PrismaClient, Role, Prisma } from '@prisma/client'
 import * as bcrypt from 'bcrypt'
+import { seedPermissions } from './seed-permissions'
 
 const prisma = new PrismaClient()
 
@@ -88,6 +89,9 @@ async function main() {
   console.log('Admin user:', { id: admin.id, email: admin.email, role: admin.role })
   console.log('Login com:', { email: adminEmail, password: adminPass })
   console.log('Employee demo:', { id: employee.id, name: employeeUser.name, cpf: employeeUser.cpf, login: { email: employeeUserEmail, password: employeeUserPass } })
+
+  // Seed de permissões
+  await seedPermissions()
 }
 
 main()

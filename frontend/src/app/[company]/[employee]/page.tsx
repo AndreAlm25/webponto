@@ -17,7 +17,7 @@ import FacialRecognitionFlow from '@/components/facial/FacialRecognitionFlow'
 import { Comfortaa, Roboto } from 'next/font/google'
 import { toast } from 'sonner'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { Tabs, TabItem } from '@/components/ui/tabs'
+import LegacyTabs, { TabItem } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 
 const comfortaa = Comfortaa({ subsets: ['latin'], weight: ['400', '700'] })
@@ -1651,7 +1651,7 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
           ) : (
             /* ========== PAINEL DE TABS (Dashboard, Vales, Holerite) ========== */
             <div className="mt-6">
-              <Tabs
+              <LegacyTabs
                 tabs={[
                   // Tab 1: Dashboard (antes era Resumo)
                   {

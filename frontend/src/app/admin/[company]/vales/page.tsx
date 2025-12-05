@@ -1,7 +1,7 @@
 "use client"
 // Código em INGLÊS; textos da UI em PORTUGUÊS
 import React, { useEffect, useState, useCallback } from 'react'
-import { notFound } from 'next/navigation'
+import { notFound, useRouter } from 'next/navigation'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import { PERMISSIONS } from '@/hooks/usePermissions'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import {
   Wallet,
   CreditCard,
@@ -325,23 +327,21 @@ export default function AdvancesPage({ params }: { params: { company: string } }
     return new Date(dateStr).toLocaleDateString('pt-BR')
   }
 
-  if (loading || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-background">
-      <PageHeader
-        title="Gestão de Vales"
-        breadcrumbs={[
-          { label: 'Dashboard', href: base },
-          { label: 'Vales', href: `${base}/vales` },
-        ]}
-      />
+    <ProtectedPage permission={PERMISSIONS.ADVANCES_VIEW} redirectTo={`/admin/${company}`}>
+      {(loading || isLoading) ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+      <div className="min-h-screen bg-background">
+        <PageHeader
+          title="Gestão de Vales"
+          breadcrumbs={[
+            { label: 'Dashboard', href: base, permission: PERMISSIONS.DASHBOARD_VIEW },
+            { label: 'Vales' },
+          ]}
+        />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Cards de estatísticas */}
@@ -730,6 +730,8 @@ export default function AdvancesPage({ params }: { params: { company: string } }
           </div>
         </div>
       )}
-    </div>
+      </div>
+      )}
+    </ProtectedPage>
   )
 }

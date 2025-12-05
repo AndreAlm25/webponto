@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { OvertimeService } from './overtime.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionGuard } from '../../common/guards';
+import { RequirePermission } from '../../common/decorators';
 import { OvertimeStatus } from '@prisma/client';
 
 @Controller('overtime')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 export class OvertimeController {
   constructor(private readonly overtimeService: OvertimeService) {}
 
@@ -13,6 +15,7 @@ export class OvertimeController {
    * Listar horas extras com filtros
    */
   @Get()
+  @RequirePermission('overtime.view')
   async listar(
     @Query('companyId') companyId: string,
     @Query('status') status?: OvertimeStatus,
@@ -33,6 +36,7 @@ export class OvertimeController {
    * Estatísticas de horas extras (pendentes, aprovadas, rejeitadas)
    */
   @Get('stats')
+  @RequirePermission('overtime.view')
   async estatisticas(@Query('companyId') companyId: string) {
     return this.overtimeService.contarPorStatus(companyId);
   }
@@ -42,6 +46,7 @@ export class OvertimeController {
    * Aprovar hora extra
    */
   @Patch(':id/approve')
+  @RequirePermission('overtime.approve')
   async aprovar(
     @Param('id') id: string,
     @Request() req: any,
@@ -55,6 +60,7 @@ export class OvertimeController {
    * Rejeitar hora extra
    */
   @Patch(':id/reject')
+  @RequirePermission('overtime.reject')
   async rejeitar(
     @Param('id') id: string,
     @Request() req: any,
@@ -68,6 +74,7 @@ export class OvertimeController {
    * Aprovar múltiplas horas extras
    */
   @Post('approve-batch')
+  @RequirePermission('overtime.approve')
   async aprovarLote(@Request() req: any, @Body() body: { timeEntryIds: string[] }) {
     return this.overtimeService.aprovarEmLote(body.timeEntryIds, req.user.userId);
   }
@@ -77,6 +84,7 @@ export class OvertimeController {
    * Rejeitar múltiplas horas extras
    */
   @Post('reject-batch')
+  @RequirePermission('overtime.reject')
   async rejeitarLote(
     @Request() req: any,
     @Body() body: { timeEntryIds: string[]; notes?: string },

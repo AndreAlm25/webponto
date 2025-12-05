@@ -72,6 +72,8 @@ model Company {
   customBenefits           CustomBenefit[]
   paymentGroups            PaymentGroup[]
   advances                 Advance[]
+  rolePermissions          RolePermission[]
+  auditLogs                AuditLog[]
 
   @@map("companies")
 }
@@ -91,6 +93,7 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sentMessages Message[]
+  auditLogs    AuditLog[]
   company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -375,12 +378,12 @@ model Address {
 }
 
 enum Role {
-  SUPER_ADMIN # Super Admin
-  COMPANY_ADMIN # Admin da Empresa
-  MANAGER # Gerente
-  HR # Recursos Humanos
-  EMPLOYEE # Funcionário
-  FINANCIAL # Financeiro
+  SUPER_ADMIN   // Super Admin
+  COMPANY_ADMIN // Admin da Empresa
+  MANAGER       // Gerente
+  HR            // Recursos Humanos
+  EMPLOYEE      // Funcionário
+  FINANCIAL     // Financeiro
 }
 
 enum TimeEntryType {
@@ -830,4 +833,68 @@ model Advance {
   @@index([employeeId, referenceYear, referenceMonth])
   @@index([status])
   @@map("advances")
+}
+
+// ==========================================
+// SISTEMA DE PERMISSÕES (RBAC + ACL)
+// ==========================================
+
+// Permissões disponíveis no sistema (seed)
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  module      String   // employees, payroll, overtime, etc.
+  action      String   // view, create, edit, delete, approve, etc.
+  key         String   @unique // employees.view, payroll.approve
+  description String   // "Visualizar funcionários"
+  createdAt   DateTime @default(now())
+  
+  rolePermissions RolePermission[]
+  
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+// Permissões por Role por Empresa (configurável pelo admin)
+model RolePermission {
+  id           String     @id @default(uuid()) @db.Uuid
+  companyId    String     @db.Uuid
+  role         Role       // MANAGER, HR, FINANCIAL (não SUPER_ADMIN nem COMPANY_ADMIN)
+  permissionId String     @db.Uuid
+  granted      Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([companyId, role, permissionId])
+  @@index([companyId, role])
+  @@map("role_permissions")
+}
+
+// Logs de Auditoria (todas as ações do sistema)
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @db.Uuid
+  userId      String?  @db.Uuid
+  userName    String   // Nome do usuário (para histórico)
+  userRole    Role     // Role no momento da ação
+  action      String   // CREATE, UPDATE, DELETE, VIEW, LOGIN, LOGOUT, APPROVE, REJECT
+  module      String   // employees, payroll, time_entries, etc.
+  entityId    String?  // ID do registro afetado
+  entityName  String?  // Nome/descrição do registro (para histórico)
+  oldData     Json?    // Dados antes da alteração
+  newData     Json?    // Dados depois da alteração
+  ip          String?  // IP do usuário
+  userAgent   String?  // Navegador/dispositivo
+  timestamp   DateTime @default(now())
+  
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([companyId, timestamp])
+  @@index([companyId, module])
+  @@index([userId])
+  @@index([module, entityId])
+  @@map("audit_logs")
 }

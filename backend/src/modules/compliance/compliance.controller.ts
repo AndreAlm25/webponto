@@ -1,10 +1,12 @@
 import { Controller, Get, Put, Body, Query, UseGuards, Req } from '@nestjs/common';
 import { ComplianceService } from './compliance.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionGuard } from '../../common/guards';
+import { RequirePermission } from '../../common/decorators';
 import { ComplianceLevel } from '@prisma/client';
 
 @Controller('compliance')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 export class ComplianceController {
   constructor(private readonly complianceService: ComplianceService) {}
 
@@ -13,6 +15,7 @@ export class ComplianceController {
    * Buscar configurações de conformidade da empresa
    */
   @Get()
+  @RequirePermission('compliance.view')
   async get(@Query('companyId') companyId: string) {
     return this.complianceService.getCompanyCompliance(companyId);
   }
@@ -22,6 +25,7 @@ export class ComplianceController {
    * Atualizar configurações de conformidade
    */
   @Put()
+  @RequirePermission('compliance.edit')
   async update(
     @Query('companyId') companyId: string,
     @Body()
@@ -49,6 +53,7 @@ export class ComplianceController {
    * Dashboard de conformidade com estatísticas
    */
   @Get('dashboard')
+  @RequirePermission('compliance.view')
   async getDashboard(
     @Query('companyId') companyId: string,
     @Query('startDate') startDate?: string,

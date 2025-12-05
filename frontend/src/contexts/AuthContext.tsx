@@ -11,10 +11,13 @@ interface User {
   name?: string  // Backend usa 'name'
   role: string
   companyId: number
+  avatarUrl?: string | null  // URL do avatar no MinIO
   company?: {
     id: number
     tradeName: string
     cnpj: string
+    slug?: string
+    logoUrl?: string | null
   }
   employee?: {
     id: number

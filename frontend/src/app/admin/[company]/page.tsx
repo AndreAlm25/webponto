@@ -1,8 +1,9 @@
 "use client"
 // Código em INGLÊS; textos da UI em PORTUGUÊS
 import React, { useEffect, useState } from 'react'
-import { notFound } from 'next/navigation'
+import { notFound, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 import { Users, Camera, Clock, MapPin, TrendingUp, AlertCircle, CheckCircle2, ClockArrowUp, ClockArrowDown, LayoutDashboard, UserRound } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
@@ -10,6 +11,7 @@ import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
 import Image from 'next/image'
 import { useWebSocket } from '@/contexts/WebSocketContext'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
 
 // Helper para construir URL completa do avatar
 const getAvatarUrl = (avatarUrl: string | null | undefined): string | null => {
@@ -26,8 +28,12 @@ const getAvatarUrl = (avatarUrl: string | null | undefined): string | null => {
 }
 
 export default function CompanyAdminSlugPage({ params }: { params: { company: string } }) {
+  const router = useRouter()
   const { user } = useAuth()
+  const { hasPermission } = usePermissions()
   const { company } = params
+  
+  // Removido: agora usa ProtectedPage para redirecionamento inteligente
   const [recentEntries, setRecentEntries] = useState<any[]>([])
   const [loadingEntries, setLoadingEntries] = useState(true)
   const [stats, setStats] = useState({
@@ -304,7 +310,7 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
   }, [companyId, onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted, onDashboardConfigUpdated, dashboardConfig.recentEntriesLimit])
 
   return (
-    <>
+    <ProtectedPage permission={PERMISSIONS.DASHBOARD_VIEW}>
       <div className="mb-6">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -469,7 +475,7 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
         </div>
         )}
       </div>
-    </>
+    </ProtectedPage>
   )
 }
 

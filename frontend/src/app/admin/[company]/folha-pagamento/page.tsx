@@ -5,6 +5,8 @@ import { notFound } from 'next/navigation'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
@@ -318,7 +320,7 @@ export default function PayrollPage({ params }: { params: { company: string } })
   }
 
   return (
-    <>
+    <ProtectedPage permission={PERMISSIONS.PAYROLL_VIEW}>
       <PageHeader
         title="Folha de Pagamento"
         description="Gerencie a folha de pagamento dos funcionários"
@@ -555,7 +557,7 @@ export default function PayrollPage({ params }: { params: { company: string } })
           }}
         />
       )}
-    </>
+    </ProtectedPage>
   )
 }
 

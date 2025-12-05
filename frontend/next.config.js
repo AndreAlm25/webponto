@@ -30,6 +30,17 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'placehold.co',
       },
+      // Permitir qualquer hostname para avatares (produção)
+      {
+        protocol: 'http',
+        hostname: '**',
+        pathname: '/api/files/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '**',
+        pathname: '/api/files/**',
+      },
     ],
   },
   env: {
