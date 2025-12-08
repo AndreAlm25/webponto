@@ -7,6 +7,8 @@ import { LayoutDashboard, Save, Eye, EyeOff } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { toast } from 'sonner'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 interface DashboardConfig {
   dashboardShowRecentEntries: boolean
@@ -111,7 +113,7 @@ export default function DashboardConfigPage() {
   }
 
   return (
-    <>
+    <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
       <PageHeader
         icon={<LayoutDashboard className="h-6 w-6" />}
         title="Configurações do Dashboard"
@@ -228,6 +230,6 @@ export default function DashboardConfigPage() {
           </button>
         </div>
       </div>
-    </>
+    </ProtectedPage>
   )
 }

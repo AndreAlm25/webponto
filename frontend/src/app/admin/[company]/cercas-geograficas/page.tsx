@@ -17,6 +17,8 @@ import { IconButton } from '@/components/ui/IconButton'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { toast } from 'sonner'
 import PageHeader from '@/components/admin/PageHeader'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 export default function GeofencesCompanyPage() {
   const params = useParams<{ company: string }>()
@@ -259,6 +261,7 @@ export default function GeofencesCompanyPage() {
   const base = `/admin/${urlSlug}`
 
   return (
+    <ProtectedPage permission={PERMISSIONS.GEOFENCES_VIEW}>
     <div className="p-4 space-y-6">
       <PageHeader
         title="Cercas Geográficas"
@@ -453,5 +456,6 @@ export default function GeofencesCompanyPage() {
         variant="danger"
       />
     </div>
+    </ProtectedPage>
   )
 }

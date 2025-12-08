@@ -7,6 +7,8 @@ import { Settings, Save, Clock, Monitor } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { toast } from 'sonner'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 interface AppSettings {
   successMessageDuration: number
@@ -97,7 +99,7 @@ export default function AppSettingsPage() {
   }
 
   return (
-    <>
+    <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
       <PageHeader
         icon={<Settings className="h-6 w-6" />}
         title="Configurações do Aplicativo"
@@ -185,6 +187,6 @@ export default function AppSettingsPage() {
           </button>
         </div>
       </div>
-    </>
+    </ProtectedPage>
   )
 }

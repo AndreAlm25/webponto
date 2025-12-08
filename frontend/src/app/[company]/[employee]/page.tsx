@@ -150,29 +150,39 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
   }, [user])
 
   // Atualizar apenas dados do funcionário (sem loading, sem piscada)
+  // Usa /api/auth/me para não precisar de permissão employees.view
   const updateEmployeeDataSilently = React.useCallback(async () => {
-    if (!user) return
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL
-      const employeeId = (user as any)?.employee?.id || (user as any)?.funcionario?.id
-      const companyId = (user as any)?.company?.id || (user as any)?.empresa?.id
-      if (!employeeId || !backendUrl) return
-
       const token = localStorage.getItem('token')
-      const resEmployees = await fetch(`${backendUrl}/api/employees?companyId=${companyId}`, {
+      if (!token || !backendUrl) return
+
+      const meResponse = await fetch(`${backendUrl}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (resEmployees.ok) {
-        const employees = await resEmployees.json()
-        const empData = employees.find((emp: any) => emp.id === employeeId)
+      
+      if (meResponse.ok) {
+        const userData = await meResponse.json()
+        const empData = userData?.employee
         if (empData) {
-          setEmployeeData(empData)
+          console.log('[WebSocket] 🔄 Atualizando dados do funcionário:', {
+            allowRemoteClockIn: empData.allowRemoteClockIn,
+            allowFacialRecognition: empData.allowFacialRecognition,
+          })
+          setEmployeeData({
+            ...empData,
+            user: {
+              name: userData.name,
+              email: userData.email,
+              avatarUrl: userData.avatarUrl,
+            }
+          })
         }
       }
     } catch (e) {
       console.error('Erro ao atualizar dados do funcionário:', e)
     }
-  }, [user])
+  }, [])
 
   // Buscar dados do funcionário e pontos do dia
   const fetchEmployeeData = React.useCallback(async (isInitialLoad = false) => {
@@ -206,7 +216,6 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
       
       const userData = await meResponse.json()
       const employeeId = userData?.employee?.id || userData?.funcionario?.id
-      const companyId = userData?.company?.id || userData?.empresa?.id
       
       if (!employeeId || !backendUrl) {
         if (isInitialLoad) {
@@ -215,16 +224,26 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
         return
       }
 
-      // Buscar dados do funcionário da lista
-      const resEmployees = await fetch(`${backendUrl}/api/employees?companyId=${companyId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (resEmployees.ok) {
-        const employees = await resEmployees.json()
-        const empData = employees.find((emp: any) => emp.id === employeeId)
-        if (empData) {
-          setEmployeeData(empData)
-        }
+      // Usar dados do funcionário que já vêm do /api/auth/me
+      // Isso evita precisar de permissão employees.view
+      const empData = userData?.employee
+      if (empData) {
+        console.log('[EmployeePage] 🔍 Dados do funcionário (do /me):', {
+          id: empData.id,
+          allowRemoteClockIn: empData.allowRemoteClockIn,
+          allowFacialRecognition: empData.allowFacialRecognition,
+          requireLiveness: empData.requireLiveness,
+          faceRegistered: empData.faceRegistered,
+        })
+        // Adicionar dados do user para ter o nome
+        setEmployeeData({
+          ...empData,
+          user: {
+            name: userData.name,
+            email: userData.email,
+            avatarUrl: userData.avatarUrl,
+          }
+        })
       }
 
       // Dados da empresa já vêm do user.company (incluindo logo)
@@ -973,12 +992,24 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
 
   // WebSocket: Atualizar quando funcionário for editado
   React.useEffect(() => {
+    console.log('[WebSocket] 🔌 Status conexão:', { connected, userId: (user as any)?.id, employeeId: (user as any)?.employee?.id })
+    
     if (!connected) return
 
     const employeeId = (user as any)?.employee?.id || (user as any)?.funcionario?.id
     if (!employeeId) return
+    
+    console.log('[WebSocket] ✅ Registrando listener para employee-updated, employeeId:', employeeId)
 
     const unsubscribe = onEmployeeUpdated(async (employee) => {
+      console.log('[WebSocket] 📥 Evento employee-updated recebido:', {
+        receivedId: employee.id,
+        myId: employeeId,
+        isMe: employee.id === employeeId,
+        allowRemoteClockIn: employee.allowRemoteClockIn,
+        allowFacialRecognition: employee.allowFacialRecognition,
+      })
+      
       if (employee.id === employeeId) {
         if (employee.active === false) {
           toast.error('Sua conta foi desativada', {
@@ -991,6 +1022,7 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
           return
         }
 
+        console.log('[WebSocket] 🔄 Atualizando dados do funcionário...')
         await refreshUser()
         await updateEmployeeDataSilently()
         checkFaceStatus()

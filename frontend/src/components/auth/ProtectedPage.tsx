@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 import { toast } from 'sonner'
@@ -51,10 +51,24 @@ export function ProtectedPage({
   const params = useParams()
   const { hasPermission, loading } = usePermissions()
   const [shouldRedirect, setShouldRedirect] = useState(false)
+  // Flag para evitar toast múltiplo
+  const toastShownRef = useRef(false)
 
   useEffect(() => {
-    if (!loading && !hasPermission(permission)) {
+    // Debug log
+    console.log('[ProtectedPage] 🔐 Verificando permissão:', {
+      permission,
+      loading,
+      hasPermission: hasPermission(permission),
+      toastShown: toastShownRef.current
+    })
+
+    // Só executar uma vez quando loading terminar e não tiver permissão
+    if (!loading && !hasPermission(permission) && !toastShownRef.current) {
+      console.log('[ProtectedPage] ❌ Sem permissão, redirecionando...')
+      toastShownRef.current = true
       setShouldRedirect(true)
+      
       if (showError) {
         toast.error('Você não tem permissão para acessar esta página')
       }
@@ -67,6 +81,7 @@ export function ProtectedPage({
         targetRoute = getFirstAllowedPage(hasPermission, company)
       }
       
+      console.log('[ProtectedPage] 🔄 Redirecionando para:', targetRoute)
       // Redirecionar imediatamente sem passar por outras páginas
       router.replace(targetRoute)
     }

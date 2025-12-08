@@ -17,6 +17,7 @@ import { seedPayrollConfig } from './02-payroll-config.seed'
 import { seedTimeEntries } from './03-time-entries.seed'
 import { seedPayroll } from './04-payroll.seed'
 import { seedAdvances } from './05-advances.seed'
+import { seedPermissionsWithClient } from '../seed-permissions'
 
 const prisma = new PrismaClient()
 
@@ -54,6 +55,7 @@ function printMenu() {
   log('  [3] ⏰ Batidas de ponto (mês atual + anterior)', 'blue')
   log('  [4] 💰 Folha de pagamento + Holerites', 'magenta')
   log('  [5] 💵 Vales/Adiantamentos', 'cyan')
+  log('  [6] 🔐 Permissões (RBAC)', 'green')
   console.log()
   log('  [A] 🚀 RODAR TODOS (reset + todos os seeds)', 'bright')
   log('  [Q] ❌ Sair', 'reset')
@@ -99,25 +101,34 @@ async function runSeed(option: string): Promise<boolean> {
         log('✅ Vales gerados!', 'green')
         break
 
+      case '6':
+        log('\n🔐 Criando permissões...', 'green')
+        await seedPermissionsWithClient(prisma)
+        log('✅ Permissões criadas!', 'green')
+        break
+
       case 'A':
         log('\n🚀 Executando TODOS os seeds...', 'bright')
         
-        log('\n[1/6] 🗑️  Limpando banco...', 'red')
+        log('\n[1/7] 🗑️  Limpando banco...', 'red')
         await resetDatabase(prisma)
         
-        log('[2/6] 🏢 Criando dados base...', 'green')
+        log('[2/7] 🏢 Criando dados base...', 'green')
         await seedBase(prisma)
         
-        log('[3/6] ⚙️  Configurando folha...', 'yellow')
+        log('[3/7] 🔐 Criando permissões...', 'green')
+        await seedPermissionsWithClient(prisma)
+        
+        log('[4/7] ⚙️  Configurando folha...', 'yellow')
         await seedPayrollConfig(prisma)
         
-        log('[4/6] ⏰ Gerando batidas...', 'blue')
+        log('[5/7] ⏰ Gerando batidas...', 'blue')
         await seedTimeEntries(prisma)
         
-        log('[5/6] 💰 Gerando folha...', 'magenta')
+        log('[6/7] 💰 Gerando folha...', 'magenta')
         await seedPayroll(prisma)
         
-        log('[6/6] 💵 Gerando vales...', 'cyan')
+        log('[7/7] 💵 Gerando vales...', 'cyan')
         await seedAdvances(prisma)
         
         log('\n✅ TODOS os seeds executados com sucesso!', 'green')

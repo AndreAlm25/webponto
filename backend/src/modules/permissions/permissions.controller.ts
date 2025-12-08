@@ -68,4 +68,17 @@ export class PermissionsController {
   async getMyPermissions(@Request() req: any) {
     return this.permissionsService.getUserPermissions(req.user.id);
   }
+
+  /**
+   * POST /api/permissions/initialize
+   * Inicializar permissões padrão para a empresa do usuário
+   * Apenas COMPANY_ADMIN pode executar
+   */
+  @Get('initialize')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('permissions.edit')
+  async initializePermissions(@Request() req: any) {
+    const companyId = req.user.companyId;
+    return this.permissionsService.initializeCompanyPermissions(companyId);
+  }
 }

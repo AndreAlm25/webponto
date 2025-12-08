@@ -13,6 +13,8 @@ import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
 import { useParams } from 'next/navigation'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 interface OvertimeEntry {
   id: string
@@ -210,7 +212,7 @@ export default function OvertimePage() {
   }
 
   return (
-    <>
+    <ProtectedPage permission={PERMISSIONS.OVERTIME_VIEW}>
       <PageHeader
         title="Hora Extra"
         description="Gerencie as horas extras dos funcionários"
@@ -393,6 +395,6 @@ export default function OvertimePage() {
           )}
         </div>
       </Card>
-    </>
+    </ProtectedPage>
   )
 }

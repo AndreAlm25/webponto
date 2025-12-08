@@ -21,7 +21,7 @@ const PermissionContext = createContext<PermissionContextType | undefined>(undef
 
 // Provider
 export function PermissionProvider({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, loading: authLoading } = useAuth()
   const [permissions, setPermissions] = useState<string[]>([])
   const [role, setRole] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -39,7 +39,16 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
   // Buscar permissões do usuário
   const fetchPermissions = useCallback(async () => {
+    // IMPORTANTE: Esperar o AuthContext terminar de carregar
+    // Se ainda está carregando, não fazer nada (manter loading = true)
+    if (authLoading) {
+      console.log('[Permissions] ⏳ Aguardando AuthContext carregar...')
+      return
+    }
+
+    // Se não está autenticado (e auth já terminou de carregar), limpar permissões
     if (!isAuthenticated) {
+      console.log('[Permissions] 🚫 Usuário não autenticado, limpando permissões')
       setPermissions([])
       setRole(null)
       setIsAdmin(false)
@@ -51,6 +60,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
       setLoading(true)
       const token = localStorage.getItem('token')
       if (!token) {
+        console.log('[Permissions] ⚠️ Token não encontrado')
         setLoading(false)
         return
       }
@@ -62,11 +72,17 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
       if (res.ok) {
         const data = await res.json()
+        console.log('[Permissions] 📋 Permissões carregadas:', {
+          role: data.role,
+          isAdmin: data.isAdmin,
+          permissionsCount: data.permissions?.length || 0,
+          permissions: data.permissions,
+        })
         setPermissions(data.permissions || [])
         setRole(data.role || null)
         setIsAdmin(data.isAdmin || false)
       } else {
-        console.error('Erro ao buscar permissões:', res.status)
+        console.error('[Permissions] ❌ Erro ao buscar permissões:', res.status)
         setPermissions([])
         setRole(null)
         setIsAdmin(false)
@@ -79,7 +95,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setLoading(false)
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, authLoading])
 
   // Buscar permissões quando autenticar
   useEffect(() => {

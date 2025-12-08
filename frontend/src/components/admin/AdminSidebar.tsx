@@ -98,8 +98,8 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
   const isMenuExpanded = (menuId: string) => expandedMenus.includes(menuId) && !collapsed
 
   return (
-    <aside className={`h-full w-full bg-card shadow-sm flex flex-col`}>
-      <nav className="flex-1 overflow-auto py-2 space-y-1">
+    <aside className="h-full w-full bg-card shadow-sm flex flex-col" style={{ maxHeight: '100%' }}>
+      <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-1 no-scrollbar">
         {/* Dashboard */}
         {hasPermission(PERMISSIONS.DASHBOARD_VIEW) && (
           <button
@@ -248,7 +248,16 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
           </div>
         )}
 
-        {/* Gestão de Colaboradores */}
+        {/* Gestão de Colaboradores - só aparece se tem pelo menos uma permissão */}
+        {hasAnyPermission([
+          PERMISSIONS.EMPLOYEES_VIEW,
+          PERMISSIONS.POSITIONS_VIEW,
+          PERMISSIONS.DEPARTMENTS_VIEW,
+          PERMISSIONS.PAYROLL_VIEW,
+          PERMISSIONS.ADVANCES_VIEW,
+          PERMISSIONS.TERMINAL_VIEW,
+          PERMISSIONS.GEOFENCES_VIEW
+        ]) && (
         <div className="relative">
           <button
             ref={buttonRef}
@@ -467,6 +476,7 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
             </div>
           )}
         </div>
+        )}
 
         {/* Alertas */}
         {hasPermission(PERMISSIONS.ALERTS_VIEW) && (
@@ -481,7 +491,12 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
           </button>
         )}
 
-        {/* Configurações (Menu Expansível) */}
+        {/* Configurações (Menu Expansível) - só aparece se tem permissão de settings, permissions ou audit */}
+        {hasAnyPermission([
+          PERMISSIONS.SETTINGS_VIEW,
+          PERMISSIONS.PERMISSIONS_VIEW,
+          PERMISSIONS.AUDIT_VIEW
+        ]) && (
         <div className="relative">
           <button
             onClick={(e) => {
@@ -505,42 +520,50 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
           {/* Submenu normal (sidebar aberta) */}
           {isMenuExpanded('configuracoes') && !collapsed && (
             <div className="ml-6 border-l border-border space-y-1">
-              <button
-                onClick={() => router.push(`${base}/configuracoes/dashboard`)}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <Monitor className="h-3 w-3 mr-2" />
-                <span>Dashboard</span>
-              </button>
-              <button
-                onClick={() => router.push(`${base}/configuracoes/folha-pagamento`)}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <FileText className="h-3 w-3 mr-2" />
-                <span>Folha de Pagamento</span>
-              </button>
-              <button
-                onClick={() => router.push(`${base}/configuracoes/conformidade`)}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <Scale className="h-3 w-3 mr-2" />
-                <span>Conformidade CLT</span>
-              </button>
-              <button
-                onClick={() => router.push(`${base}/configuracoes/aplicativo`)}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <Settings className="h-3 w-3 mr-2" />
-                <span>Aplicativo</span>
-              </button>
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/configuracoes/dashboard`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Monitor className="h-3 w-3 mr-2" />
+                  <span>Dashboard</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/configuracoes/folha-pagamento`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <FileText className="h-3 w-3 mr-2" />
+                  <span>Folha de Pagamento</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/configuracoes/conformidade`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Scale className="h-3 w-3 mr-2" />
+                  <span>Conformidade CLT</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/configuracoes/aplicativo`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Settings className="h-3 w-3 mr-2" />
+                  <span>Aplicativo</span>
+                </button>
+              )}
               {hasPermission(PERMISSIONS.PERMISSIONS_VIEW) && (
                 <button
                   onClick={() => router.push(`${base}/configuracoes/permissoes`)}
@@ -579,54 +602,62 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">
                 Config. da Empresa
               </div>
-              <button
-                onClick={() => {
-                  router.push(`${base}/configuracoes/dashboard`)
-                  setDropdownOpen(false)
-                }}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <Monitor className="h-4 w-4 mr-2" />
-                <span>Dashboard</span>
-              </button>
-              <button
-                onClick={() => {
-                  router.push(`${base}/configuracoes/folha-pagamento`)
-                  setDropdownOpen(false)
-                }}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                <span>Folha de Pagamento</span>
-              </button>
-              <button
-                onClick={() => {
-                  router.push(`${base}/configuracoes/conformidade`)
-                  setDropdownOpen(false)
-                }}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <Scale className="h-4 w-4 mr-2" />
-                <span>Conformidade CLT</span>
-              </button>
-              <button
-                onClick={() => {
-                  router.push(`${base}/configuracoes/aplicativo`)
-                  setDropdownOpen(false)
-                }}
-                className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                  isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
-                }`}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                <span>Aplicativo</span>
-              </button>
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/configuracoes/dashboard`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Monitor className="h-4 w-4 mr-2" />
+                  <span>Dashboard</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/configuracoes/folha-pagamento`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  <span>Folha de Pagamento</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/configuracoes/conformidade`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/conformidade`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Scale className="h-4 w-4 mr-2" />
+                  <span>Conformidade CLT</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/configuracoes/aplicativo`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  <span>Aplicativo</span>
+                </button>
+              )}
               {hasPermission(PERMISSIONS.PERMISSIONS_VIEW) && (
                 <button
                   onClick={() => {
@@ -658,6 +689,7 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
             </div>
           )}
         </div>
+        )}
       </nav>
     </aside>
   )

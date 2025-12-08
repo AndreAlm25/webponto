@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Scale, TrendingUp, Clock, AlertTriangle, DollarSign, Users, Download, FileText, Filter } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import PageHeader from '@/components/admin/PageHeader'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 import {
   Tooltip as UITooltip,
   TooltipContent,
@@ -281,6 +283,7 @@ export default function DashboardConformidadePage() {
   const base = `/admin/${company}`
 
   return (
+    <ProtectedPage permission={PERMISSIONS.COMPLIANCE_VIEW}>
     <TooltipProvider>
       <div className="space-y-6">
         <PageHeader
@@ -685,5 +688,6 @@ export default function DashboardConformidadePage() {
       )}
       </div>
     </TooltipProvider>
+    </ProtectedPage>
   )
 }

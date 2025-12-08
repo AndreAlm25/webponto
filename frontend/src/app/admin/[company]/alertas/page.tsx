@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import PageHeader from '@/components/admin/PageHeader'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 import { Bell, AlertTriangle, Clock, BedDouble, ClockAlert, Filter } from 'lucide-react'
 
 interface Alert {
@@ -136,6 +138,7 @@ export default function AlertsPage() {
   }
 
   return (
+    <ProtectedPage permission={PERMISSIONS.ALERTS_VIEW}>
     <div className="p-6">
       <PageHeader
         title="Alertas"
@@ -251,5 +254,6 @@ export default function AlertsPage() {
         )}
       </div>
     </div>
+    </ProtectedPage>
   )
 }

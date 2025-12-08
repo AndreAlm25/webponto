@@ -6,6 +6,8 @@ import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import Image from 'next/image'
 import { useWebSocket } from '@/contexts/WebSocketContext'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 // Helper para construir URL completa do avatar
 const getAvatarUrl = (avatarUrl: string | null | undefined): string | null => {
@@ -247,6 +249,7 @@ const entryDate = `${entryDateObj.getFullYear()}-${String(entryDateObj.getMonth(
   }
 
   return (
+    <ProtectedPage permission={PERMISSIONS.TIME_ENTRIES_VIEW}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -409,6 +412,7 @@ const entryDate = `${entryDateObj.getFullYear()}-${String(entryDateObj.getMonth(
         </div>
       </div>
     </div>
+    </ProtectedPage>
   )
 }
 

@@ -192,14 +192,15 @@ const DEFAULT_PERMISSIONS: Record<Role, string[]> = {
 // FUNÇÃO DE SEED
 // ============================================
 
-export async function seedPermissions() {
+// Versão que aceita prisma client externo (para uso no menu de seeds)
+export async function seedPermissionsWithClient(prismaClient: PrismaClient) {
   console.log('🔐 Iniciando seed de permissões...');
 
   // 1. Criar todas as permissões
   console.log(`📝 Criando ${PERMISSIONS.length} permissões...`);
   
   for (const perm of PERMISSIONS) {
-    await prisma.permission.upsert({
+    await prismaClient.permission.upsert({
       where: { key: perm.key },
       update: {
         module: perm.module,
@@ -218,21 +219,25 @@ export async function seedPermissions() {
   console.log('✅ Permissões criadas!');
 
   // 2. Criar permissões padrão para cada empresa existente
-  const companies = await prisma.company.findMany({ select: { id: true, tradeName: true } });
+  const companies = await prismaClient.company.findMany({ select: { id: true, tradeName: true } });
   console.log(`🏢 Configurando permissões para ${companies.length} empresas...`);
 
   for (const company of companies) {
-    await seedCompanyPermissions(company.id);
+    await seedCompanyPermissionsWithClient(prismaClient, company.id);
     console.log(`  ✅ ${company.tradeName}`);
   }
 
   console.log('🎉 Seed de permissões concluído!');
 }
 
-// Função para criar permissões padrão de uma empresa
-export async function seedCompanyPermissions(companyId: string) {
-  const permissions = await prisma.permission.findMany();
-  const permissionMap = new Map(permissions.map(p => [p.key, p.id]));
+// Versão original (usa prisma client local)
+export async function seedPermissions() {
+  return seedPermissionsWithClient(prisma);
+}
+
+// Função para criar permissões padrão de uma empresa (com client externo)
+export async function seedCompanyPermissionsWithClient(prismaClient: PrismaClient, companyId: string) {
+  const permissions = await prismaClient.permission.findMany();
 
   // Para cada role configurável (MANAGER, HR, FINANCIAL)
   const configurableRoles: Role[] = [Role.MANAGER, Role.HR, Role.FINANCIAL];
@@ -243,7 +248,7 @@ export async function seedCompanyPermissions(companyId: string) {
     for (const perm of permissions) {
       const granted = defaultPerms.includes(perm.key);
 
-      await prisma.rolePermission.upsert({
+      await prismaClient.rolePermission.upsert({
         where: {
           companyId_role_permissionId: {
             companyId,
@@ -261,6 +266,11 @@ export async function seedCompanyPermissions(companyId: string) {
       });
     }
   }
+}
+
+// Função para criar permissões padrão de uma empresa (usa prisma client local)
+export async function seedCompanyPermissions(companyId: string) {
+  return seedCompanyPermissionsWithClient(prisma, companyId);
 }
 
 // Executar se chamado diretamente

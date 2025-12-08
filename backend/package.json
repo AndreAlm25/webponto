@@ -29,6 +29,7 @@
     "seed:time": "ts-node prisma/seeds/index.ts 3",
     "seed:payroll": "ts-node prisma/seeds/index.ts 4",
     "seed:advances": "ts-node prisma/seeds/index.ts 5",
+    "seed:permissions": "ts-node prisma/seeds/index.ts 6",
     "seed:all": "ts-node prisma/seeds/index.ts A"
   },
   "prisma": {

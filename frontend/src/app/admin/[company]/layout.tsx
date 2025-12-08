@@ -107,7 +107,7 @@ export default function CompanyAdminLayout({
         </div>
       </div>
 
-      <div style={{ gridArea: 'sidebar' }} className="bg-card border-r border-border">
+      <div style={{ gridArea: 'sidebar' }} className="bg-card border-r border-border overflow-hidden">
         <AdminSidebar collapsed={sidebarCollapsed} />
       </div>
 

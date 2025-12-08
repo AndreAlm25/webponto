@@ -7,6 +7,8 @@ import { Scale, AlertTriangle, Save } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { toast } from 'sonner'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 type ComplianceLevel = 'FULL' | 'FLEXIBLE' | 'CUSTOM'
 
@@ -145,6 +147,7 @@ export default function CompliancePage() {
   }
 
   return (
+    <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
     <div className="p-6">
       <PageHeader
         title="Conformidade CLT"
@@ -488,5 +491,6 @@ export default function CompliancePage() {
         </div>
       </div>
     </div>
+    </ProtectedPage>
   )
 }

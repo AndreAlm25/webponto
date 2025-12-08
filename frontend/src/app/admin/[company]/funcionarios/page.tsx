@@ -13,6 +13,8 @@ import EditEmployeeModal from '@/components/admin/EditEmployeeModal'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 export default function EmployeesPage({ params }: { params: { company: string } }) {
   const { user } = useAuth()
@@ -142,7 +144,7 @@ export default function EmployeesPage({ params }: { params: { company: string } 
   const base = company ? `/admin/${encodeURIComponent(company)}` : '/admin'
 
   return (
-    <>
+    <ProtectedPage permission={PERMISSIONS.EMPLOYEES_VIEW}>
       <PageHeader
         title="Funcionários"
         description="Gerencie sua equipe"
@@ -243,7 +245,7 @@ export default function EmployeesPage({ params }: { params: { company: string } 
           employeeId={selectedEmployeeId}
         />
       )}
-    </>
+    </ProtectedPage>
   )
 }
 

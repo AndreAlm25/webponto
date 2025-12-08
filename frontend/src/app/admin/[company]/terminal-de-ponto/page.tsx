@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Comfortaa, Roboto } from 'next/font/google'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 
 // Fontes
 const comfortaa = Comfortaa({ subsets: ['latin'], weight: ['300', '400', '700'] })

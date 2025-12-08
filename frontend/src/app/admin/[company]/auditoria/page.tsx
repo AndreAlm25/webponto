@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -223,6 +224,7 @@ export default function AuditoriaPage() {
   }
 
   return (
+    <ProtectedPage permission={PERMISSIONS.AUDIT_VIEW}>
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -483,5 +485,6 @@ export default function AuditoriaPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </ProtectedPage>
   )
 }

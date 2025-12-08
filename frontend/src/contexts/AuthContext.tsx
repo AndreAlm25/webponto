@@ -151,17 +151,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const companySlug = slugify(companyName) || (data.user.companyId ? `empresa-${data.user.companyId}` : 'empresa')
       const employeeSlug = slugify(employeeName) || (data.user.employee?.id || data.user.funcionario?.id ? `func-${data.user.employee?.id || data.user.funcionario?.id}` : 'colaborador')
 
-      let nextRoute = '/dashboard'
+      // SUPER_ADMIN → Admin do sistema
       if (role === 'SUPER_ADMIN') {
-        nextRoute = '/admin-webponto'
-      } else if (role === 'COMPANY_ADMIN' || role === 'MANAGER' || role === 'HR' || role === 'FINANCIAL') {
-        nextRoute = `/admin/${companySlug}`
-      } else if (role === 'EMPLOYEE' || !!data.user.employee || !!data.user.funcionario) {
-        nextRoute = `/${companySlug}/${employeeSlug}`
-      } else {
-        nextRoute = '/dashboard'
+        router.push('/admin-webponto')
+        return
       }
-      router.push(nextRoute)
+      
+      // COMPANY_ADMIN → Direto para admin da empresa
+      if (role === 'COMPANY_ADMIN') {
+        router.push(`/admin/${companySlug}`)
+        return
+      }
+      
+      // MANAGER/HR/FINANCIAL → Fica na página de login para mostrar modal de escolha
+      // O useEffect na página de login vai detectar isAuthenticated e mostrar o modal
+      if (role === 'MANAGER' || role === 'HR' || role === 'FINANCIAL') {
+        // Não redireciona - deixa a página de login mostrar o modal
+        return
+      }
+      
+      // EMPLOYEE → Direto para painel pessoal
+      if (role === 'EMPLOYEE' || !!data.user.employee || !!data.user.funcionario) {
+        router.push(`/${companySlug}/${employeeSlug}`)
+        return
+      }
+      
+      // Fallback
+      router.push('/dashboard')
     } catch (error: any) {
       toast.error(error.message || 'Erro ao fazer login')
       throw error

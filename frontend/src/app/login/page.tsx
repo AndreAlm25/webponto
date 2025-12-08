@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
-import { LogIn, Loader2 } from 'lucide-react'
+import { LogIn, Loader2, Building2, User, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
@@ -13,6 +13,24 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [loading, setLoading] = useState(false)
+  // Modal de escolha para MANAGER/HR/FINANCIAL
+  const [showPanelChoice, setShowPanelChoice] = useState(false)
+  const [panelRoutes, setPanelRoutes] = useState<{ admin: string; personal: string }>({ admin: '', personal: '' })
+  // Estado para mostrar loading após escolher painel
+  const [redirecting, setRedirecting] = useState(false)
+  const [chosenPanel, setChosenPanel] = useState<'admin' | 'personal' | null>(null)
+
+  // Função para gerar slug
+  const slugify = (value?: string) => {
+    if (!value) return ''
+    return value
+      .toString()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '')
+  }
 
   // Se já autenticado, redirecionar conforme o papel
   useEffect(() => {
@@ -20,18 +38,7 @@ export default function LoginPage() {
 
     console.log('🔐 [Login] Redirecionando usuário autenticado...')
     console.log('🔐 [Login] User data:', user)
-    console.log('🔐 [Login] Company slug do banco:', (user.company as any)?.slug)
-
-    const slugify = (value?: string) => {
-      if (!value) return ''
-      return value
-        .toString()
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)+/g, '')
-    }
+    console.log('🔐 [Login] User role:', user.role)
 
     // ✅ USA O SLUG DO BANCO, NÃO GERA NOVO
     const companySlug = (user.company as any)?.slug || slugify(user.company?.tradeName || user.empresa?.nomeFantasia) || (user.companyId ? `empresa-${user.companyId}` : 'empresa')
@@ -39,21 +46,52 @@ export default function LoginPage() {
     const employeeName = (user as any).employee?.name || (user as any).funcionario?.nome || user.name || user.nome
     const employeeSlug = slugify(employeeName) || ((user as any).employee?.id || (user as any).funcionario?.id ? `func-${(user as any).employee?.id || (user as any).funcionario?.id}` : 'colaborador')
 
-    let nextRoute = '/dashboard'
+    // SUPER_ADMIN → Admin do sistema
     if (user.role === 'SUPER_ADMIN') {
-      nextRoute = '/admin-webponto'
-      console.log('🔐 [Login] SUPER_ADMIN → Redirecionando para:', nextRoute)
-    } else if (user.role === 'COMPANY_ADMIN' || user.role === 'MANAGER' || user.role === 'HR' || user.role === 'FINANCIAL') {
-      nextRoute = `/admin/${companySlug}`
-      console.log('🔐 [Login] COMPANY_ADMIN/MANAGER/HR/FINANCIAL → Redirecionando para:', nextRoute)
-    } else if (user.role === 'EMPLOYEE' || !!(user as any).employee || !!(user as any).funcionario) {
-      nextRoute = `/${companySlug}/${employeeSlug}`
-      console.log('🔐 [Login] EMPLOYEE → Redirecionando para:', nextRoute)
+      console.log('🔐 [Login] SUPER_ADMIN → Redirecionando para admin-webponto')
+      router.replace('/admin-webponto')
+      return
+    }
+    
+    // COMPANY_ADMIN → Direto para admin da empresa
+    if (user.role === 'COMPANY_ADMIN') {
+      console.log('🔐 [Login] COMPANY_ADMIN → Redirecionando para admin da empresa')
+      router.replace(`/admin/${companySlug}`)
+      return
+    }
+    
+    // MANAGER/HR/FINANCIAL → Modal de escolha (Admin ou Pessoal)
+    if (user.role === 'MANAGER' || user.role === 'HR' || user.role === 'FINANCIAL') {
+      console.log('🔐 [Login] MANAGER/HR/FINANCIAL → Mostrando modal de escolha')
+      setPanelRoutes({
+        admin: `/admin/${companySlug}`,
+        personal: `/${companySlug}/${employeeSlug}`
+      })
+      setShowPanelChoice(true)
+      return
+    }
+    
+    // EMPLOYEE → Direto para painel pessoal
+    if (user.role === 'EMPLOYEE' || !!(user as any).employee || !!(user as any).funcionario) {
+      console.log('🔐 [Login] EMPLOYEE → Redirecionando para painel pessoal')
+      router.replace(`/${companySlug}/${employeeSlug}`)
+      return
     }
 
-    console.log('🔐 [Login] Rota final:', nextRoute)
-    router.replace(nextRoute)
+    // Fallback
+    console.log('🔐 [Login] Fallback → Dashboard')
+    router.replace('/dashboard')
   }, [isAuthenticated, user, router])
+
+  // Função para escolher painel
+  const handlePanelChoice = (panel: 'admin' | 'personal') => {
+    // Não fecha o modal - apenas mostra loading e redireciona
+    setChosenPanel(panel)
+    setRedirecting(true)
+    const route = panel === 'admin' ? panelRoutes.admin : panelRoutes.personal
+    console.log(`🔐 [Login] Usuário escolheu: ${panel} → ${route}`)
+    router.replace(route)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,6 +110,94 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Modal de escolha de painel
+  if (showPanelChoice) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-yellow-50">
+        <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-2xl border-2 border-webponto-blue/10">
+          {/* Logo */}
+          <div className="text-center mb-6">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <div className="text-4xl font-black text-webponto-blue">P</div>
+              <div className="w-10 h-10 rounded-full border-4 border-webponto-yellow flex items-center justify-center">
+                <div className="w-1.5 h-5 bg-webponto-yellow rotate-45"></div>
+                <div className="w-1.5 h-5 bg-webponto-yellow -rotate-45 -ml-1.5"></div>
+              </div>
+              <div className="text-4xl font-black text-webponto-blue">nto</div>
+            </div>
+          </div>
+
+          {/* Saudação */}
+          <div className="text-center mb-8">
+            <h2 className="text-xl font-bold text-slate-900 mb-2">
+              Olá, {user?.name || 'Usuário'}! 👋
+            </h2>
+            <p className="text-slate-600">
+              {redirecting ? 'Redirecionando...' : 'Para onde você deseja ir?'}
+            </p>
+          </div>
+
+          {/* Opções ou Loading */}
+          {redirecting ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Loader2 className="w-12 h-12 text-webponto-blue animate-spin mb-4" />
+              <p className="text-slate-600 font-medium">
+                {chosenPanel === 'admin' ? 'Abrindo Painel Administrativo...' : 'Abrindo Meu Painel...'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Painel Admin */}
+              <button
+                onClick={() => handlePanelChoice('admin')}
+                className="w-full p-4 rounded-xl border-2 border-slate-200 hover:border-webponto-blue hover:bg-blue-50 transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-webponto-blue/10 flex items-center justify-center group-hover:bg-webponto-blue/20 transition">
+                    <Building2 className="w-7 h-7 text-webponto-blue" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-semibold text-slate-900 text-lg">Painel Administrativo</h3>
+                    <p className="text-sm text-slate-500">Gerenciar funcionários, registros e relatórios</p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Painel Pessoal */}
+              <button
+                onClick={() => handlePanelChoice('personal')}
+                className="w-full p-4 rounded-xl border-2 border-slate-200 hover:border-green-500 hover:bg-green-50 transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition">
+                    <User className="w-7 h-7 text-green-600" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-semibold text-slate-900 text-lg">Meu Painel</h3>
+                    <p className="text-sm text-slate-500">Bater ponto, ver holerite e mensagens</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Info do usuário */}
+          <div className="mt-6 pt-4 border-t border-slate-200">
+            <p className="text-xs text-slate-400 text-center">
+              Logado como <span className="font-medium text-slate-600">{user?.email}</span>
+              <br />
+              <span className="text-slate-500">
+                {user?.role === 'MANAGER' && '👔 Gerente'}
+                {user?.role === 'HR' && '👥 Recursos Humanos'}
+                {user?.role === 'FINANCIAL' && '💰 Financeiro'}
+              </span>
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

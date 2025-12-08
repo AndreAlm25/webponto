@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import { PERMISSIONS } from '@/hooks/usePermissions'
 import {
   Settings,
   Save,
@@ -399,7 +401,7 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
   }
 
   return (
-    <>
+    <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
       <PageHeader
         title="Configurações da Folha"
         description="Configure encargos, benefícios e parâmetros de cálculo"
@@ -1120,6 +1122,6 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
           </div>
         </div>
       )}
-    </>
+    </ProtectedPage>
   )
 }

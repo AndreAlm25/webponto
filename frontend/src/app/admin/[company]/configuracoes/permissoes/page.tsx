@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, Can, PERMISSIONS } from '@/hooks/usePermissions'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -183,6 +184,7 @@ export default function PermissoesPage() {
   const pendingChanges = Object.keys(changes).length
 
   return (
+    <ProtectedPage permission={PERMISSIONS.PERMISSIONS_VIEW}>
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -332,5 +334,6 @@ export default function PermissoesPage() {
         </Button>
       </div>
     </div>
+    </ProtectedPage>
   )
 }
