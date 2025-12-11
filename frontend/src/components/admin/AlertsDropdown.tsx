@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Bell, AlertTriangle, Clock, BedDouble, ClockAlert } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
+import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 
 interface Alert {
   id: string
@@ -28,6 +29,7 @@ export default function AlertsDropdown() {
   const params = useParams()
   const router = useRouter()
   const company = params?.company as string
+  const { hasPermission } = usePermissions()
   
   const [isOpen, setIsOpen] = useState(false)
   const [summary, setSummary] = useState<AlertsSummary | null>(null)
@@ -51,8 +53,9 @@ export default function AlertsDropdown() {
           const data = await res.json()
           setSummary(data)
         }
+        // Silenciar erro 404 - endpoint pode não existir ainda
       } catch (error) {
-        console.error('Erro ao buscar resumo de alertas:', error)
+        // Silenciar erro - endpoint pode não existir ainda
       }
     }
 
@@ -135,6 +138,11 @@ export default function AlertsDropdown() {
   }
 
   const totalAlerts = summary?.high || 0
+
+  // Se não tem permissão de ver alertas, não renderiza o componente
+  if (!hasPermission(PERMISSIONS.ALERTS_VIEW)) {
+    return null
+  }
 
   return (
     <div className="relative">

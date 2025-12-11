@@ -44,6 +44,7 @@ export const PERMISSIONS = {
   ADVANCES_CREATE: 'advances.create',
   ADVANCES_APPROVE: 'advances.approve',
   ADVANCES_REJECT: 'advances.reject',
+  ADVANCES_PAY: 'advances.pay',
   ADVANCES_DELETE: 'advances.delete',
 
   // Departamentos

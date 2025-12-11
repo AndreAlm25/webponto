@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { MessageSquare, Loader2 } from 'lucide-react'
 import { useMessages, MessageThread } from '@/hooks/useMessages'
 import { useWebSocket } from '@/contexts/WebSocketContext'
+import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 import { Comfortaa } from 'next/font/google'
 import Image from 'next/image'
 import { getFileUrl } from '@/utils/files'
@@ -15,6 +16,7 @@ export default function MessagesDropdown() {
   const params = useParams<{ company: string }>()
   const { connected, socket } = useWebSocket()
   const { unreadCount, fetchThreads, fetchUnreadCount } = useMessages()
+  const { hasPermission } = usePermissions()
   const [isOpen, setIsOpen] = useState(false)
   const [threads, setThreads] = useState<MessageThread[]>([])
   const [loading, setLoading] = useState(false)
@@ -97,6 +99,11 @@ export default function MessagesDropdown() {
   const viewAllMessages = () => {
     setIsOpen(false)
     router.push(`/admin/${params.company}/mensagens`)
+  }
+
+  // Se não tem permissão de ver mensagens, não renderiza o componente
+  if (!hasPermission(PERMISSIONS.MESSAGES_VIEW)) {
+    return null
   }
 
   return (

@@ -3,12 +3,14 @@
 // - Baseado no projeto antigo (ponto)
 // - Menu dropdown com ícones
 // - Modais de confirmação para ações destrutivas
+// - Protegido por permissões (atualiza em tempo real via WebSocket)
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Settings, Edit, UserX, Trash2, CameraOff, AlertTriangle, MessageSquare, ScanFace } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Can, PERMISSIONS, usePermissions } from '@/hooks/usePermissions'
 
 interface Employee {
   id: string
@@ -41,12 +43,21 @@ export default function EmployeeActionsMenu({
 }: EmployeeActionsMenuProps) {
   const router = useRouter()
   const params = useParams<{ company?: string }>()
+  const { hasPermission, hasAnyPermission } = usePermissions()
   const [showMenu, setShowMenu] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false)
   const [showDisableFaceConfirm, setShowDisableFaceConfirm] = useState(false)
   const [menuPosition, setMenuPosition] = useState<'bottom' | 'top'>('bottom')
   const buttonRef = useRef<HTMLButtonElement>(null)
+
+  // Verificar se o usuário tem pelo menos uma permissão que mostra algo no menu
+  const hasAnyMenuPermission = hasAnyPermission([
+    PERMISSIONS.EMPLOYEES_EDIT,
+    PERMISSIONS.EMPLOYEES_DELETE,
+    PERMISSIONS.MESSAGES_CREATE,
+    PERMISSIONS.EMPLOYEES_MANAGE_FACE,
+  ])
 
   const handleEdit = () => {
     onEdit(employee)
@@ -139,6 +150,11 @@ export default function EmployeeActionsMenu({
     setShowDisableFaceConfirm(false)
   }
 
+  // Se não tem nenhuma permissão do menu, não renderiza o botão
+  if (!hasAnyMenuPermission) {
+    return null
+  }
+
   return (
     <>
       <div className="relative">
@@ -165,78 +181,92 @@ export default function EmployeeActionsMenu({
               menuPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
             }`}>
               <div className="py-1">
-                <button
-                  onClick={handleEdit}
-                  className="flex items-center w-full px-3 py-2 text-sm hover:bg-accent transition-colors"
-                  title="Editar Funcionário"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </button>
+                {/* Editar - requer employees.edit */}
+                <Can permission={PERMISSIONS.EMPLOYEES_EDIT}>
+                  <button
+                    onClick={handleEdit}
+                    className="flex items-center w-full px-3 py-2 text-sm hover:bg-accent transition-colors"
+                    title="Editar Funcionário"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Editar
+                  </button>
+                </Can>
 
-                <button
-                  onClick={handleSendMessage}
-                  className="flex items-center w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                  title="Enviar Mensagem"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Mensagem
-                </button>
+                {/* Mensagem - requer messages.create */}
+                <Can permission={PERMISSIONS.MESSAGES_CREATE}>
+                  <button
+                    onClick={handleSendMessage}
+                    className="flex items-center w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                    title="Enviar Mensagem"
+                  >
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Mensagem
+                  </button>
+                </Can>
 
-                {/* Botão de Face - Só aparece se allowFacialRecognition = true */}
-                {allowFacialRecognition && (
-                  hasFaceRegistered ? (
+                {/* Botão de Face - requer employees.manage_face + allowFacialRecognition = true */}
+                <Can permission={PERMISSIONS.EMPLOYEES_MANAGE_FACE}>
+                  {allowFacialRecognition && (
+                    hasFaceRegistered ? (
+                      <button
+                        onClick={handleDisableFaceRecognition}
+                        className="flex items-center w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                        title="Excluir Reconhecimento Facial"
+                      >
+                        <CameraOff className="h-4 w-4 mr-2" />
+                        Excluir Face
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleRegisterFace}
+                        className="flex items-center w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                        title="Cadastrar Reconhecimento Facial"
+                      >
+                        <ScanFace className="h-4 w-4 mr-2" />
+                        Cadastrar Face
+                      </button>
+                    )
+                  )}
+                </Can>
+
+                {/* Desativar/Reativar - requer employees.edit */}
+                <Can permission={PERMISSIONS.EMPLOYEES_EDIT}>
+                  {employee.status === 'ACTIVE' ? (
                     <button
-                      onClick={handleDisableFaceRecognition}
-                      className="flex items-center w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                      title="Excluir Reconhecimento Facial"
+                      onClick={handleDeactivate}
+                      className="flex items-center w-full px-3 py-2 text-sm text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30 transition-colors"
+                      title="Desativar Funcionário"
                     >
-                      <CameraOff className="h-4 w-4 mr-2" />
-                      Excluir
+                      <UserX className="h-4 w-4 mr-2" />
+                      Desativar
                     </button>
                   ) : (
                     <button
-                      onClick={handleRegisterFace}
-                      className="flex items-center w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                      title="Cadastrar Reconhecimento Facial"
+                      onClick={() => {
+                        onDeactivate(employee)
+                        setShowMenu(false)
+                      }}
+                      className="flex items-center w-full px-3 py-2 text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors"
+                      title="Reativar Funcionário"
                     >
-                      <ScanFace className="h-4 w-4 mr-2" />
-                      Cadastrar
+                      <UserX className="h-4 w-4 mr-2" />
+                      Reativar
                     </button>
-                  )
-                )}
+                  )}
+                </Can>
 
-                {employee.status === 'ACTIVE' ? (
+                {/* Excluir - requer employees.delete */}
+                <Can permission={PERMISSIONS.EMPLOYEES_DELETE}>
                   <button
-                    onClick={handleDeactivate}
-                    className="flex items-center w-full px-3 py-2 text-sm text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30 transition-colors"
-                    title="Desativar Funcionário"
+                    onClick={handleDelete}
+                    className="flex items-center w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                    title="Excluir Funcionário"
                   >
-                    <UserX className="h-4 w-4 mr-2" />
-                    Desativar
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
                   </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      onDeactivate(employee)
-                      setShowMenu(false)
-                    }}
-                    className="flex items-center w-full px-3 py-2 text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors"
-                    title="Reativar Funcionário"
-                  >
-                    <UserX className="h-4 w-4 mr-2" />
-                    Reativar
-                  </button>
-                )}
-
-                <button
-                  onClick={handleDelete}
-                  className="flex items-center w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                  title="Excluir Funcionário"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir
-                </button>
+                </Can>
               </div>
             </div>
           </>

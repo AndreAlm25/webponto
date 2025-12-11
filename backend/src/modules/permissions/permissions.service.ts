@@ -3,10 +3,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Role } from '@prisma/client';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 import { seedCompanyPermissions } from '../../../prisma/seed-permissions';
+import { EventsGateway } from '../../events/events.gateway';
 
 @Injectable()
 export class PermissionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventsGateway: EventsGateway,
+  ) {}
 
   /**
    * Listar todas as permissões disponíveis no sistema
@@ -136,6 +140,10 @@ export class PermissionsService {
     });
 
     await this.prisma.$transaction(updates);
+
+    // Emitir evento WebSocket para atualizar permissões em tempo real
+    // Todos os usuários com esse role na empresa vão recarregar suas permissões
+    this.eventsGateway.emitPermissionsUpdated(companyId, role);
 
     return { success: true, message: 'Permissões atualizadas com sucesso' };
   }

@@ -6,7 +6,7 @@ import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
-import { PERMISSIONS } from '@/hooks/usePermissions'
+import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
@@ -392,39 +392,47 @@ export default function PayrollPage({ params }: { params: { company: string } })
       {/* Ações */}
       <div className="flex flex-wrap gap-3 mb-6">
         {payroll?.status === 'DRAFT' && (
-          <Button onClick={handleGenerate} disabled={isGenerating}>
-            {isGenerating ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Gerando...
-              </>
-            ) : (
-              <>
-                <Calculator className="h-4 w-4 mr-2" />
-                Gerar Holerites
-              </>
-            )}
-          </Button>
+          <Can permission={PERMISSIONS.PAYROLL_GENERATE}>
+            <Button onClick={handleGenerate} disabled={isGenerating}>
+              {isGenerating ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Gerando...
+                </>
+              ) : (
+                <>
+                  <Calculator className="h-4 w-4 mr-2" />
+                  Gerar Holerites
+                </>
+              )}
+            </Button>
+          </Can>
         )}
         
         {payroll?.status === 'REVIEW' && (
           <>
-            <Button onClick={handleGenerate} variant="outline" disabled={isGenerating}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Recalcular
-            </Button>
-            <Button onClick={handleApprove} className="bg-green-600 hover:bg-green-700">
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Aprovar Folha
-            </Button>
+            <Can permission={PERMISSIONS.PAYROLL_GENERATE}>
+              <Button onClick={handleGenerate} variant="outline" disabled={isGenerating}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Recalcular
+              </Button>
+            </Can>
+            <Can permission={PERMISSIONS.PAYROLL_APPROVE}>
+              <Button onClick={handleApprove} className="bg-green-600 hover:bg-green-700">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Aprovar Folha
+              </Button>
+            </Can>
           </>
         )}
         
         {payroll?.status === 'APPROVED' && (
-          <Button onClick={handleMarkAsPaid} className="bg-emerald-600 hover:bg-emerald-700">
-            <DollarSign className="h-4 w-4 mr-2" />
-            Marcar como Paga
-          </Button>
+          <Can permission={PERMISSIONS.PAYROLL_PAY}>
+            <Button onClick={handleMarkAsPaid} className="bg-emerald-600 hover:bg-emerald-700">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Marcar como Paga
+            </Button>
+          </Can>
         )}
 
         <Button variant="outline" onClick={fetchPayroll}>
@@ -432,12 +440,14 @@ export default function PayrollPage({ params }: { params: { company: string } })
           Atualizar
         </Button>
 
-        <Link href={`${base}/configuracoes/folha-pagamento`}>
-          <Button variant="outline">
-            <Settings className="h-4 w-4 mr-2" />
-            Configurações
-          </Button>
-        </Link>
+        <Can permission={PERMISSIONS.SETTINGS_EDIT}>
+          <Link href={`${base}/configuracoes/folha-pagamento`}>
+            <Button variant="outline">
+              <Settings className="h-4 w-4 mr-2" />
+              Configurações
+            </Button>
+          </Link>
+        </Can>
       </div>
 
       {/* Lista de Holerites */}

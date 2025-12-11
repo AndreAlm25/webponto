@@ -14,7 +14,7 @@ import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
 import { useParams } from 'next/navigation'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
-import { PERMISSIONS } from '@/hooks/usePermissions'
+import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 
 interface OvertimeEntry {
   id: string
@@ -362,26 +362,32 @@ export default function OvertimePage() {
                   </div>
                   {entry.overtimeStatus === 'PENDING' && (
                     <div className="flex gap-2 ml-4">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-green-600 hover:bg-green-50"
-                        onClick={() => handleApprove(entry.id)}
-                        disabled={processingIds.has(entry.id)}
-                      >
-                        <Check className="h-4 w-4 mr-1" />
-                        Aprovar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-red-600 hover:bg-red-50"
-                        onClick={() => handleReject(entry.id)}
-                        disabled={processingIds.has(entry.id)}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Rejeitar
-                      </Button>
+                      {/* Aprovar - requer overtime.approve */}
+                      <Can permission={PERMISSIONS.OVERTIME_APPROVE}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-green-600 hover:bg-green-50"
+                          onClick={() => handleApprove(entry.id)}
+                          disabled={processingIds.has(entry.id)}
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Aprovar
+                        </Button>
+                      </Can>
+                      {/* Rejeitar - requer overtime.reject */}
+                      <Can permission={PERMISSIONS.OVERTIME_REJECT}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => handleReject(entry.id)}
+                          disabled={processingIds.has(entry.id)}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Rejeitar
+                        </Button>
+                      </Can>
                     </div>
                   )}
                 </div>

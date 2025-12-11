@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { PERMISSIONS } from '@/hooks/usePermissions'
+import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import {
   Wallet,
@@ -481,10 +481,12 @@ export default function AdvancesPage({ params }: { params: { company: string } }
             <Button variant="outline" size="icon" onClick={fetchData}>
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <Button onClick={() => setShowNewModal(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Vale
-            </Button>
+            <Can permission={PERMISSIONS.ADVANCES_CREATE}>
+              <Button onClick={() => setShowNewModal(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Vale
+              </Button>
+            </Can>
           </div>
         </div>
 
@@ -563,50 +565,58 @@ export default function AdvancesPage({ params }: { params: { company: string } }
                         <div className="flex items-center gap-1">
                           {advance.status === 'PENDING' && (
                             <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                onClick={() => handleApprove(advance)}
-                                title="Aprovar"
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => {
-                                  setRejectingAdvance(advance)
-                                  setShowRejectModal(true)
-                                }}
-                                title="Rejeitar"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              <Can permission={PERMISSIONS.ADVANCES_APPROVE}>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={() => handleApprove(advance)}
+                                  title="Aprovar"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              </Can>
+                              <Can permission={PERMISSIONS.ADVANCES_REJECT}>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    setRejectingAdvance(advance)
+                                    setShowRejectModal(true)
+                                  }}
+                                  title="Rejeitar"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </Can>
                             </>
                           )}
                           {advance.status === 'APPROVED' && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              onClick={() => handleMarkAsPaid(advance)}
-                              title="Marcar como pago"
-                            >
-                              <Banknote className="h-4 w-4" />
-                            </Button>
+                            <Can permission={PERMISSIONS.ADVANCES_PAY}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                onClick={() => handleMarkAsPaid(advance)}
+                                title="Marcar como pago"
+                              >
+                                <Banknote className="h-4 w-4" />
+                              </Button>
+                            </Can>
                           )}
                           {['PENDING', 'APPROVED'].includes(advance.status) && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-                              onClick={() => handleCancel(advance)}
-                              title="Cancelar"
-                            >
-                              <Ban className="h-4 w-4" />
-                            </Button>
+                            <Can permission={PERMISSIONS.ADVANCES_DELETE}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                                onClick={() => handleCancel(advance)}
+                                title="Cancelar"
+                              >
+                                <Ban className="h-4 w-4" />
+                              </Button>
+                            </Can>
                           )}
                         </div>
                       </td>

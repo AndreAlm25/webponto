@@ -2,7 +2,7 @@
 // Sidebar do Admin (código em inglês; textos em português)
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Bell, Scale, ClockIcon, TrendingUp, List, Monitor, Wallet, Shield, FileSearch } from 'lucide-react'
+import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Scale, ClockIcon, TrendingUp, List, Monitor, Wallet, Shield, FileSearch } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 
@@ -476,19 +476,6 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
             </div>
           )}
         </div>
-        )}
-
-        {/* Alertas */}
-        {hasPermission(PERMISSIONS.ALERTS_VIEW) && (
-          <button
-            onClick={() => router.push(`${base}/alertas`)}
-            className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${itemClass} ${
-              isActive(`${base}/alertas`) ? 'bg-muted/50 font-medium' : ''
-            }`}
-          >
-            <Bell className={`${iconSize}`} />
-            <span className={`${labelClass} flex-1 text-left`}>Alertas</span>
-          </button>
         )}
 
         {/* Configurações (Menu Expansível) - só aparece se tem permissão de settings, permissions ou audit */}

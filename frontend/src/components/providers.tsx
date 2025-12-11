@@ -24,11 +24,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" storageKey="webponto-theme">
         <AuthProvider>
-          <PermissionProvider>
-            <ClientOnlyWebSocket>
+          <ClientOnlyWebSocket>
+            <PermissionProvider>
               {children}
-            </ClientOnlyWebSocket>
-          </PermissionProvider>
+            </PermissionProvider>
+          </ClientOnlyWebSocket>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

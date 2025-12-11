@@ -7,7 +7,7 @@ import { Scale, TrendingUp, Clock, AlertTriangle, DollarSign, Users, Download, F
 import { useAuth } from '@/contexts/AuthContext'
 import PageHeader from '@/components/admin/PageHeader'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
-import { PERMISSIONS } from '@/hooks/usePermissions'
+import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 import {
   Tooltip as UITooltip,
   TooltipContent,
@@ -352,36 +352,40 @@ export default function DashboardConformidadePage() {
           <div className="flex gap-3 items-center flex-wrap">
 
             {/* Botão Exportar PDF */}
-            <UITooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={exportToPDF}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors font-medium"
-                >
-                  <FileText className="h-5 w-5" />
-                  Exportar PDF
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Exportar relatório em PDF</p>
-              </TooltipContent>
-            </UITooltip>
+            <Can permission={PERMISSIONS.COMPLIANCE_EXPORT}>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={exportToPDF}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors font-medium"
+                  >
+                    <FileText className="h-5 w-5" />
+                    Exportar PDF
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Exportar relatório em PDF</p>
+                </TooltipContent>
+              </UITooltip>
+            </Can>
 
             {/* Botão Exportar Excel */}
-            <UITooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={exportToExcel}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium"
-                >
-                  <Download className="h-5 w-5" />
-                  Exportar Excel
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Exportar dados em Excel</p>
-              </TooltipContent>
-            </UITooltip>
+            <Can permission={PERMISSIONS.COMPLIANCE_EXPORT}>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={exportToExcel}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium"
+                  >
+                    <Download className="h-5 w-5" />
+                    Exportar Excel
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Exportar dados em Excel</p>
+                </TooltipContent>
+              </UITooltip>
+            </Can>
           </div>
         </div>
 

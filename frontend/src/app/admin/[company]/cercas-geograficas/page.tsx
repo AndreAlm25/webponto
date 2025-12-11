@@ -18,7 +18,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { toast } from 'sonner'
 import PageHeader from '@/components/admin/PageHeader'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
-import { PERMISSIONS } from '@/hooks/usePermissions'
+import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 
 export default function GeofencesCompanyPage() {
   const params = useParams<{ company: string }>()
@@ -364,27 +364,30 @@ export default function GeofencesCompanyPage() {
           />
           <div className="text-xs text-gray-600">{radius} metros</div>
 
-          <div className="flex gap-2">
-            <PrimaryButton
-              disabled={!companyId || creating}
-              onClick={editingId ? onUpdate : onCreate}
-              icon={editingId ? Edit : Save}
-              loading={creating}
-              fullWidth
-              className="mt-2 uppercase"
-            >
-              {editingId ? 'Atualizar cerca' : 'Salvar cerca'}
-            </PrimaryButton>
-            {editingId && (
+          {/* Botões de criar/editar - requer geofences.create ou geofences.edit */}
+          <Can permissions={[PERMISSIONS.GEOFENCES_CREATE, PERMISSIONS.GEOFENCES_EDIT]}>
+            <div className="flex gap-2">
               <PrimaryButton
-                onClick={onCancelEdit}
-                variant="outline"
+                disabled={!companyId || creating}
+                onClick={editingId ? onUpdate : onCreate}
+                icon={editingId ? Edit : Save}
+                loading={creating}
+                fullWidth
                 className="mt-2 uppercase"
               >
-                Cancelar
+                {editingId ? 'Atualizar cerca' : 'Salvar cerca'}
               </PrimaryButton>
-            )}
-          </div>
+              {editingId && (
+                <PrimaryButton
+                  onClick={onCancelEdit}
+                  variant="outline"
+                  className="mt-2 uppercase"
+                >
+                  Cancelar
+                </PrimaryButton>
+              )}
+            </div>
+          </Can>
         </div>
         <div className="md:col-span-2">
           <MapGeofence 
@@ -419,20 +422,26 @@ export default function GeofencesCompanyPage() {
                   <div className="text-gray-600 dark:text-gray-400">Raio: {g.radiusMeters} m | Lat: {g.centerLat.toFixed(6)} Lng: {g.centerLng.toFixed(6)}</div>
                 </div>
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <IconButton 
-                    icon={Edit}
-                    onClick={() => onEdit(g)} 
-                    variant="outline"
-                    size="md"
-                    tooltip="Editar cerca geográfica"
-                  />
-                  <IconButton 
-                    icon={Trash2}
-                    onClick={() => setDeleteConfirm({ isOpen: true, id: g.id, name: g.name })} 
-                    variant="danger"
-                    size="md"
-                    tooltip="Excluir cerca geográfica"
-                  />
+                  {/* Editar - requer geofences.edit */}
+                  <Can permission={PERMISSIONS.GEOFENCES_EDIT}>
+                    <IconButton 
+                      icon={Edit}
+                      onClick={() => onEdit(g)} 
+                      variant="outline"
+                      size="md"
+                      tooltip="Editar cerca geográfica"
+                    />
+                  </Can>
+                  {/* Excluir - requer geofences.delete */}
+                  <Can permission={PERMISSIONS.GEOFENCES_DELETE}>
+                    <IconButton 
+                      icon={Trash2}
+                      onClick={() => setDeleteConfirm({ isOpen: true, id: g.id, name: g.name })} 
+                      variant="danger"
+                      size="md"
+                      tooltip="Excluir cerca geográfica"
+                    />
+                  </Can>
                 </div>
               </div>
             ))}

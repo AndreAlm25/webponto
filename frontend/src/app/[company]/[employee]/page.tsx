@@ -8,7 +8,7 @@ import {
   X, MessageCircleMore, MapPin, MapPinCheck, ScanFace, ClockArrowUp, ClockArrowDown, 
   Clock12, Clock2, UserRound, Clock, Clock11, ChartBarStacked, Calendar, LayoutDashboard,
   FileText, Wallet, BarChart3, ChevronLeft, ChevronRight, Download, CheckCircle, AlertCircle, Fingerprint,
-  TrendingUp, DollarSign, CalendarDays, ClipboardCheck, Banknote, Timer, UserX, Clock3
+  TrendingUp, DollarSign, CalendarDays, ClipboardCheck, Banknote, Timer, UserX, Clock3, Building2
 } from 'lucide-react'
 import { ActionButton } from '@/components/ActionButton'
 import { MessageModal } from '@/components/MessageModal'
@@ -1640,6 +1640,33 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                 setShowPanel(true)
               }}
             />
+            {/* Botão PAINEL ADMIN - só para MANAGER, HR e FINANCIAL */}
+            {user && ['MANAGER', 'HR', 'FINANCIAL'].includes(user.role) && (
+              <ActionButton
+                label="PAINEL ADMIN"
+                icon={<Building2 className="w-5 h-5" />}
+                bgColor="#3B82F6"
+                textColor="#fff"
+                border
+                borderColor="#2563EB"
+                className={`${roboto.className}`}
+                onClick={() => {
+                  // Gerar slug da empresa (mesma lógica do login)
+                  const slugify = (value?: string) => {
+                    if (!value) return ''
+                    return value
+                      .toString()
+                      .normalize('NFD')
+                      .replace(/\p{Diacritic}/gu, '')
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/(^-|-$)+/g, '')
+                  }
+                  const companySlug = (user.company as any)?.slug || slugify((user as any).company?.tradeName || (user as any).empresa?.nomeFantasia) || (user.companyId ? `empresa-${user.companyId}` : 'empresa')
+                  router.push(`/admin/${companySlug}`)
+                }}
+              />
+            )}
             <ActionButton
               label="MESSAGE"
               icon={<MessageCircleMore className="w-5 h-5" />}

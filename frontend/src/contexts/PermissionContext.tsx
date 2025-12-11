@@ -27,22 +27,16 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   
-  // WebSocket é opcional (pode não estar disponível)
-  let onPermissionsUpdated: ((callback: (data: { userId: string, role: string }) => void) => () => void) | undefined
-  try {
-    const ws = useWebSocket()
-    onPermissionsUpdated = ws.onPermissionsUpdated
-  } catch (e) {
-    // WebSocket não disponível, continuar sem ele
-    onPermissionsUpdated = undefined
-  }
+  // WebSocket - chamar hook diretamente no nível superior
+  const websocket = useWebSocket()
+  const wsConnected = websocket.connected
+  const onPermissionsUpdated = websocket.onPermissionsUpdated
 
   // Buscar permissões do usuário
   const fetchPermissions = useCallback(async () => {
     // IMPORTANTE: Esperar o AuthContext terminar de carregar
     // Se ainda está carregando, não fazer nada (manter loading = true)
     if (authLoading) {
-      console.log('[Permissions] ⏳ Aguardando AuthContext carregar...')
       return
     }
 
@@ -72,12 +66,6 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
       if (res.ok) {
         const data = await res.json()
-        console.log('[Permissions] 📋 Permissões carregadas:', {
-          role: data.role,
-          isAdmin: data.isAdmin,
-          permissionsCount: data.permissions?.length || 0,
-          permissions: data.permissions,
-        })
         setPermissions(data.permissions || [])
         setRole(data.role || null)
         setIsAdmin(data.isAdmin || false)
@@ -103,19 +91,27 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   }, [fetchPermissions])
 
   // Escutar atualizações de permissões via WebSocket
+  // Importante: depende de wsConnected para re-registrar quando o WebSocket conectar
   useEffect(() => {
-    if (!user?.id || !onPermissionsUpdated) return
+    if (!user?.id || !wsConnected || !onPermissionsUpdated) {
+      return
+    }
 
-    const unsubscribe = onPermissionsUpdated((data) => {
-      // Se a atualização é para este usuário, recarregar permissões
-      if (data.userId === String(user.id)) {
-        console.log('[Permissions] 🔄 Permissões atualizadas via WebSocket')
+    // Pegar o role do usuário diretamente (pode ser do user ou do state)
+    const userRole = (user as any)?.role || role
+
+    const unsubscribe = onPermissionsUpdated((data: any) => {
+      // Verificar se a atualização é para este usuário (por userId ou por role)
+      const isForThisUser = data.userId === String(user.id)
+      const isForThisRole = data.role && userRole && data.role === userRole
+      
+      if (isForThisUser || isForThisRole) {
         fetchPermissions()
       }
     })
 
-    return unsubscribe
-  }, [user?.id, onPermissionsUpdated, fetchPermissions])
+    return () => unsubscribe()
+  }, [user, role, wsConnected, onPermissionsUpdated, fetchPermissions])
 
   // Verificar se tem uma permissão específica
   const hasPermission = useCallback((permission: string): boolean => {

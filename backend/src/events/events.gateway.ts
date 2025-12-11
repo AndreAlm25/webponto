@@ -180,4 +180,38 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`📤 Emitindo ${event} para todos os clientes`);
     this.server.emit(event, data);
   }
+
+  /**
+   * Emitir evento de permissões atualizadas para usuários de um role específico
+   * Isso faz com que todos os usuários desse role recarreguem suas permissões
+   */
+  emitPermissionsUpdated(companyId: string, role: string) {
+    this.logger.log(`📤 Emitindo permissions-updated para empresa ${companyId}, role ${role}`);
+    
+    // Emitir para todos os clientes da empresa
+    // O frontend vai verificar se o role do usuário corresponde
+    this.server.to(`company:${companyId}`).emit('permissions-updated', { 
+      companyId, 
+      role,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Emitir evento de permissões atualizadas para um usuário específico
+   */
+  emitPermissionsUpdatedToUser(userId: string) {
+    this.logger.log(`📤 Emitindo permissions-updated para usuário ${userId}`);
+    
+    // Encontrar o socket do usuário
+    for (const [clientId, clientInfo] of this.connectedClients.entries()) {
+      if (clientInfo.userId === userId) {
+        clientInfo.socket.emit('permissions-updated', { 
+          userId,
+          timestamp: new Date().toISOString()
+        });
+        this.logger.log(`📤 Evento enviado para socket ${clientId}`);
+      }
+    }
+  }
 }

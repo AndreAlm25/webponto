@@ -48,10 +48,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
-    // Só conectar se tiver usuário autenticado
-    if (!user) {
+    // Só conectar se tiver usuário autenticado com ID
+    if (!user || !(user as any)?.id) {
       if (socket) {
-        console.log('[WebSocket] 🔌 Desconectando (sem usuário)')
         socket.disconnect()
         setSocket(null)
         setConnected(false)
@@ -59,18 +58,23 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // Se já tem socket conectado, não criar outro
+    if (socket?.connected) {
+      return
+    }
+
     // Obter URL do backend e token JWT
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
     const token = localStorage.getItem('token')
     
-    // Conectando ao WebSocket com autenticação
 
     // Criar conexão WebSocket com autenticação
     const newSocket = io(backendUrl, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Polling primeiro para evitar falhas
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
+      timeout: 20000,
       auth: {
         token: token
       }
@@ -93,8 +97,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setConnected(false)
     })
 
-    newSocket.on('connect_error', (error) => {
-      console.error('[WebSocket] ⚠️ Erro de conexão:', error.message)
+    newSocket.on('connect_error', () => {
+      // Silenciar erro de conexão
     })
 
     newSocket.on('reconnect', () => {
@@ -118,7 +122,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   // Função helper para registrar listeners
   const registerListener = useCallback(
     (event: string, callback: (...args: any[]) => void) => {
-      if (!socket) return () => {}
+      if (!socket) {
+        return () => {}
+      }
 
       socket.on(event, callback)
 

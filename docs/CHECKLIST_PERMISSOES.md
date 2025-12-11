@@ -12,7 +12,7 @@
 |------|-----------|--------|-----------|
 | 1 | Corrigir Sidebar (menus) | ✅ Concluído | 3/3 |
 | 2 | Auditar Páginas (ProtectedPage) | ✅ Implementado | 13/14 |
-| 3 | Auditar Botões de Ação | ⏳ Pendente | 0/? |
+| 3 | Auditar Botões de Ação | 🔄 Em Progresso | 3/? |
 | 4 | Testar por Role | ⏳ Pendente | 0/3 |
 
 ---
@@ -76,131 +76,188 @@ Garantir que botões de criar/editar/excluir só apareçam com permissão.
 
 | Botão | Permissão | Implementado? | Status |
 |-------|-----------|---------------|--------|
-| Novo Funcionário | `employees.create` | 🔍 Verificar | ⏳ |
-| Editar Funcionário | `employees.edit` | 🔍 Verificar | ⏳ |
-| Excluir Funcionário | `employees.delete` | 🔍 Verificar | ⏳ |
-| Gerenciar Face | `employees.manage_face` | 🔍 Verificar | ⏳ |
-| Exportar | `employees.export` | 🔍 Verificar | ⏳ |
+| Novo Funcionário | `employees.create` | ✅ SIM | ✅ |
+| Editar Funcionário | `employees.edit` | ✅ SIM | ✅ |
+| Excluir Funcionário | `employees.delete` | ✅ SIM | ✅ |
+| Gerenciar Face | `employees.manage_face` | ✅ SIM | ✅ |
+| Exportar | `employees.export` | ✅ SIM | ✅ |
 
 ### Cargos (`/admin/[company]/cargos`)
 
-| Botão | Permissão | Implementado? | Status |
-|-------|-----------|---------------|--------|
-| Novo Cargo | `positions.create` | 🔍 Verificar | ⏳ |
-| Editar Cargo | `positions.edit` | 🔍 Verificar | ⏳ |
-| Excluir Cargo | `positions.delete` | 🔍 Verificar | ⏳ |
+> Página não existe separadamente (gerenciado em funcionários)
 
 ### Departamentos (`/admin/[company]/departamentos`)
 
-| Botão | Permissão | Implementado? | Status |
-|-------|-----------|---------------|--------|
-| Novo Departamento | `departments.create` | 🔍 Verificar | ⏳ |
-| Editar Departamento | `departments.edit` | 🔍 Verificar | ⏳ |
-| Excluir Departamento | `departments.delete` | 🔍 Verificar | ⏳ |
+> Página não existe separadamente (gerenciado em funcionários)
 
 ### Folha de Pagamento (`/admin/[company]/folha-pagamento`)
 
 | Botão | Permissão | Implementado? | Status |
 |-------|-----------|---------------|--------|
-| Gerar Folha | `payroll.generate` | 🔍 Verificar | ⏳ |
-| Aprovar Folha | `payroll.approve` | 🔍 Verificar | ⏳ |
-| Marcar como Paga | `payroll.pay` | 🔍 Verificar | ⏳ |
-| Exportar | `payroll.export` | 🔍 Verificar | ⏳ |
+| Gerar Folha | `payroll.generate` | ✅ SIM | ✅ |
+| Aprovar Folha | `payroll.approve` | ✅ SIM | ✅ |
+| Marcar como Paga | `payroll.pay` | ✅ SIM | ✅ |
+| Configurações | `settings.edit` | ✅ SIM | ✅ |
 
 ### Vales (`/admin/[company]/vales`)
 
 | Botão | Permissão | Implementado? | Status |
 |-------|-----------|---------------|--------|
-| Novo Vale | `advances.create` | 🔍 Verificar | ⏳ |
-| Aprovar Vale | `advances.approve` | 🔍 Verificar | ⏳ |
-| Rejeitar Vale | `advances.reject` | 🔍 Verificar | ⏳ |
-| Cancelar Vale | `advances.delete` | 🔍 Verificar | ⏳ |
+| Novo Vale | `advances.create` | ✅ SIM | ✅ |
+| Aprovar Vale | `advances.approve` | ✅ SIM | ✅ |
+| Rejeitar Vale | `advances.reject` | ✅ SIM | ✅ |
+| Marcar como Pago | `advances.pay` | ✅ SIM | ✅ |
+| Cancelar Vale | `advances.delete` | ✅ SIM | ✅ |
 
 ### Hora Extra (`/admin/[company]/analises/hora-extra`)
 
 | Botão | Permissão | Implementado? | Status |
 |-------|-----------|---------------|--------|
-| Aprovar | `overtime.approve` | 🔍 Verificar | ⏳ |
-| Rejeitar | `overtime.reject` | 🔍 Verificar | ⏳ |
-| Exportar | `overtime.export` | 🔍 Verificar | ⏳ |
-
-### Registros de Ponto (`/admin/[company]/analises/registros`)
-
-| Botão | Permissão | Implementado? | Status |
-|-------|-----------|---------------|--------|
-| Novo Registro | `time_entries.create` | 🔍 Verificar | ⏳ |
-| Editar Registro | `time_entries.edit` | 🔍 Verificar | ⏳ |
-| Excluir Registro | `time_entries.delete` | 🔍 Verificar | ⏳ |
-| Exportar | `time_entries.export` | 🔍 Verificar | ⏳ |
+| Aprovar | `overtime.approve` | ✅ SIM | ✅ |
+| Rejeitar | `overtime.reject` | ✅ SIM | ✅ |
 
 ### Cercas Geográficas (`/admin/[company]/cercas-geograficas`)
 
 | Botão | Permissão | Implementado? | Status |
 |-------|-----------|---------------|--------|
-| Nova Cerca | `geofences.create` | 🔍 Verificar | ⏳ |
-| Editar Cerca | `geofences.edit` | 🔍 Verificar | ⏳ |
-| Excluir Cerca | `geofences.delete` | 🔍 Verificar | ⏳ |
+| Nova Cerca | `geofences.create` | ✅ SIM | ✅ |
+| Editar Cerca | `geofences.edit` | ✅ SIM | ✅ |
+| Excluir Cerca | `geofences.delete` | ✅ SIM | ✅ |
 
-### Configurações
+### Mensagens (`/admin/[company]/mensagens`)
 
 | Botão | Permissão | Implementado? | Status |
 |-------|-----------|---------------|--------|
-| Salvar Config | `settings.edit` | 🔍 Verificar | ⏳ |
-| Editar Permissões | `permissions.edit` | 🔍 Verificar | ⏳ |
+| Nova Mensagem | `messages.create` | ✅ SIM | ✅ |
+
+### Conformidade CLT (`/admin/[company]/analises/conformidade-clt`)
+
+| Botão | Permissão | Implementado? | Status |
+|-------|-----------|---------------|--------|
+| Exportar PDF | `compliance.export` | ✅ SIM | ✅ |
+| Exportar Excel | `compliance.export` | ✅ SIM | ✅ |
+
+### Registros de Ponto (`/admin/[company]/analises/registros`)
+
+> Página apenas de visualização, sem botões de ação
+
+### Permissões (`/admin/[company]/configuracoes/permissoes`)
+
+| Botão | Permissão | Implementado? | Status |
+|-------|-----------|---------------|--------|
+| Salvar | `permissions.edit` | ✅ SIM | ✅ |
+
+---
+
+## ✅ FASE 3 CONCLUÍDA
+
+Todos os botões de ação nas páginas principais foram protegidos com o componente `<Can>`.
+
+### Páginas auditadas:
+- ✅ Funcionários (criar, editar, excluir, gerenciar face)
+- ✅ Folha de Pagamento (gerar, aprovar, pagar)
+- ✅ Vales (criar, aprovar, rejeitar, pagar, cancelar)
+- ✅ Hora Extra (aprovar, rejeitar)
+- ✅ Cercas Geográficas (criar, editar, excluir)
+- ✅ Mensagens (criar)
+- ✅ Conformidade CLT (exportar)
+- ✅ Permissões (salvar)
 
 ---
 
 ## 👤 FASE 4: TESTAR POR ROLE
 
+### Permissões Padrão por Role (seed-permissions.ts)
+
+**MANAGER:**
+- dashboard.view, employees.view, time_entries.view/create/export
+- overtime.view/approve/reject, departments.view, positions.view
+- geofences.view, messages.view/create, alerts.view, compliance.view
+- terminal.view/clock_in
+
+**HR:**
+- dashboard.view, employees.view/create/edit/export/manage_face
+- time_entries.view/create/edit/export, overtime.view/approve/reject/export
+- payroll.view/export, advances.view/create
+- departments.view/create/edit, positions.view/create/edit
+- geofences.view, messages.view/create, alerts.view
+- compliance.view/export, terminal.view/clock_in
+
+**FINANCIAL:**
+- dashboard.view
+- payroll.view/create/edit/approve/pay/generate/export
+- advances.view/approve/reject/delete
+
+---
+
 ### MANAGER
 
-| Funcionalidade | Esperado | Resultado | Status |
-|----------------|----------|-----------|--------|
-| Ver Dashboard | ✅ Acesso | 🔍 | ⏳ |
-| Ver Funcionários | ✅ Acesso | 🔍 | ⏳ |
-| Criar Funcionário | ❌ Botão oculto | 🔍 | ⏳ |
-| Editar Funcionário | ❌ Botão oculto | 🔍 | ⏳ |
-| Ver Registros | ✅ Acesso | 🔍 | ⏳ |
-| Criar Registro | ✅ Botão visível | 🔍 | ⏳ |
-| Ver Hora Extra | ✅ Acesso | 🔍 | ⏳ |
-| Aprovar Hora Extra | ✅ Botão visível | 🔍 | ⏳ |
-| Ver Folha | ❌ Menu oculto | 🔍 | ⏳ |
-| Ver Vales | ❌ Menu oculto | 🔍 | ⏳ |
-| Ver Configurações | ❌ Menu oculto | 🔍 | ⏳ |
+| Funcionalidade | Permissão | Esperado | Status |
+|----------------|-----------|----------|--------|
+| Ver Dashboard | dashboard.view | ✅ Acesso | ⏳ |
+| Ver Funcionários | employees.view | ✅ Acesso | ⏳ |
+| Criar Funcionário | employees.create | ❌ Oculto | ⏳ |
+| Editar Funcionário | employees.edit | ❌ Oculto | ⏳ |
+| Ver Registros | time_entries.view | ✅ Acesso | ⏳ |
+| Criar Registro | time_entries.create | ✅ Visível | ⏳ |
+| Ver Hora Extra | overtime.view | ✅ Acesso | ⏳ |
+| Aprovar Hora Extra | overtime.approve | ✅ Visível | ⏳ |
+| Ver Folha | payroll.view | ❌ Oculto | ⏳ |
+| Ver Vales | advances.view | ❌ Oculto | ⏳ |
+| Ver Cercas | geofences.view | ✅ Acesso | ⏳ |
+| Criar Cerca | geofences.create | ❌ Oculto | ⏳ |
+| Ver Mensagens | messages.view | ✅ Acesso | ⏳ |
+| Ver Conformidade | compliance.view | ✅ Acesso | ⏳ |
+| Ver Configurações | settings.view | ❌ Oculto | ⏳ |
+| Ver Permissões | permissions.view | ❌ Oculto | ⏳ |
 
 ### HR
 
-| Funcionalidade | Esperado | Resultado | Status |
-|----------------|----------|-----------|--------|
-| Ver Dashboard | ✅ Acesso | 🔍 | ⏳ |
-| Ver Funcionários | ✅ Acesso | 🔍 | ⏳ |
-| Criar Funcionário | ✅ Botão visível | 🔍 | ⏳ |
-| Editar Funcionário | ✅ Botão visível | 🔍 | ⏳ |
-| Excluir Funcionário | ❌ Botão oculto | 🔍 | ⏳ |
-| Ver Registros | ✅ Acesso | 🔍 | ⏳ |
-| Editar Registro | ✅ Botão visível | 🔍 | ⏳ |
-| Ver Folha | ✅ Acesso | 🔍 | ⏳ |
-| Gerar Folha | ❌ Botão oculto | 🔍 | ⏳ |
-| Ver Vales | ✅ Acesso | 🔍 | ⏳ |
-| Aprovar Vale | ❌ Botão oculto | 🔍 | ⏳ |
-| Ver Configurações | ❌ Menu oculto | 🔍 | ⏳ |
+| Funcionalidade | Permissão | Esperado | Status |
+|----------------|-----------|----------|--------|
+| Ver Dashboard | dashboard.view | ✅ Acesso | ⏳ |
+| Ver Funcionários | employees.view | ✅ Acesso | ⏳ |
+| Criar Funcionário | employees.create | ✅ Visível | ⏳ |
+| Editar Funcionário | employees.edit | ✅ Visível | ⏳ |
+| Excluir Funcionário | employees.delete | ❌ Oculto | ⏳ |
+| Gerenciar Face | employees.manage_face | ✅ Visível | ⏳ |
+| Ver Registros | time_entries.view | ✅ Acesso | ⏳ |
+| Editar Registro | time_entries.edit | ✅ Visível | ⏳ |
+| Ver Hora Extra | overtime.view | ✅ Acesso | ⏳ |
+| Aprovar Hora Extra | overtime.approve | ✅ Visível | ⏳ |
+| Ver Folha | payroll.view | ✅ Acesso | ⏳ |
+| Gerar Folha | payroll.generate | ❌ Oculto | ⏳ |
+| Ver Vales | advances.view | ✅ Acesso | ⏳ |
+| Criar Vale | advances.create | ✅ Visível | ⏳ |
+| Aprovar Vale | advances.approve | ❌ Oculto | ⏳ |
+| Ver Cercas | geofences.view | ✅ Acesso | ⏳ |
+| Criar Cerca | geofences.create | ❌ Oculto | ⏳ |
+| Ver Conformidade | compliance.view | ✅ Acesso | ⏳ |
+| Exportar Conformidade | compliance.export | ✅ Visível | ⏳ |
+| Ver Configurações | settings.view | ❌ Oculto | ⏳ |
+| Ver Permissões | permissions.view | ❌ Oculto | ⏳ |
 
 ### FINANCIAL
 
-| Funcionalidade | Esperado | Resultado | Status |
-|----------------|----------|-----------|--------|
-| Ver Dashboard | ✅ Acesso | 🔍 | ⏳ |
-| Ver Funcionários | ❌ Menu oculto | 🔍 | ⏳ |
-| Ver Registros | ❌ Menu oculto | 🔍 | ⏳ |
-| Ver Hora Extra | ❌ Menu oculto | 🔍 | ⏳ |
-| Ver Folha | ✅ Acesso | 🔍 | ⏳ |
-| Gerar Folha | ✅ Botão visível | 🔍 | ⏳ |
-| Aprovar Folha | ✅ Botão visível | 🔍 | ⏳ |
-| Ver Vales | ✅ Acesso | 🔍 | ⏳ |
-| Aprovar Vale | ✅ Botão visível | 🔍 | ⏳ |
-| Ver Configurações | ❌ Menu oculto | 🔍 | ⏳ |
-| Ver Cargos | ❌ Menu oculto | 🔍 | ⏳ |
-| Ver Departamentos | ❌ Menu oculto | 🔍 | ⏳ |
+| Funcionalidade | Permissão | Esperado | Status |
+|----------------|-----------|----------|--------|
+| Ver Dashboard | dashboard.view | ✅ Acesso | ⏳ |
+| Ver Funcionários | employees.view | ❌ Oculto | ⏳ |
+| Ver Registros | time_entries.view | ❌ Oculto | ⏳ |
+| Ver Hora Extra | overtime.view | ❌ Oculto | ⏳ |
+| Ver Folha | payroll.view | ✅ Acesso | ⏳ |
+| Gerar Folha | payroll.generate | ✅ Visível | ⏳ |
+| Aprovar Folha | payroll.approve | ✅ Visível | ⏳ |
+| Pagar Folha | payroll.pay | ✅ Visível | ⏳ |
+| Ver Vales | advances.view | ✅ Acesso | ⏳ |
+| Aprovar Vale | advances.approve | ✅ Visível | ⏳ |
+| Rejeitar Vale | advances.reject | ✅ Visível | ⏳ |
+| Cancelar Vale | advances.delete | ✅ Visível | ⏳ |
+| Ver Cercas | geofences.view | ❌ Oculto | ⏳ |
+| Ver Mensagens | messages.view | ❌ Oculto | ⏳ |
+| Ver Conformidade | compliance.view | ❌ Oculto | ⏳ |
+| Ver Configurações | settings.view | ❌ Oculto | ⏳ |
+| Ver Permissões | permissions.view | ❌ Oculto | ⏳ |
 
 ---
 

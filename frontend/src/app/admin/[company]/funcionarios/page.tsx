@@ -14,7 +14,7 @@ import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
-import { PERMISSIONS } from '@/hooks/usePermissions'
+import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 
 export default function EmployeesPage({ params }: { params: { company: string } }) {
   const { user } = useAuth()
@@ -165,10 +165,12 @@ export default function EmployeesPage({ params }: { params: { company: string } 
                 <h2 className="text-lg font-semibold">Lista de Funcionários</h2>
                 <p className="text-sm text-muted-foreground">Todos os colaboradores cadastrados</p>
               </div>
-              <Button onClick={() => setShowAddEmployee(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar
-              </Button>
+              <Can permission={PERMISSIONS.EMPLOYEES_CREATE}>
+                <Button onClick={() => setShowAddEmployee(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar
+                </Button>
+              </Can>
             </div>
             <div className="flex items-center space-x-2">
               <Search className="h-4 w-4 text-muted-foreground" />

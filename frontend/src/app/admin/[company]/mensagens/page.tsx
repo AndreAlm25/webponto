@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useWebSocket } from '@/contexts/WebSocketContext'
 import { useMessages, MessageThread } from '@/hooks/useMessages'
 import { MessageSquare, Search, Loader2, MessageCircleMore, Plus, X } from 'lucide-react'
+import { PERMISSIONS, Can } from '@/hooks/usePermissions'
+import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { Comfortaa } from 'next/font/google'
 import Image from 'next/image'
 import { getFileUrl } from '@/utils/files'
@@ -168,6 +170,7 @@ export default function MessagesPage() {
   )
 
   return (
+    <ProtectedPage permission={PERMISSIONS.MESSAGES_VIEW}>
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="border-b border-border bg-card px-6 py-4">
@@ -176,13 +179,15 @@ export default function MessagesPage() {
             <MessageSquare className="w-6 h-6 text-primary" />
             <h1 className={`${comfortaa.className} text-2xl font-bold`}>Mensagens</h1>
           </div>
-          <button
-            onClick={handleNewMessage}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            <span className={`${comfortaa.className} font-semibold`}>Nova Mensagem</span>
-          </button>
+          <Can permission={PERMISSIONS.MESSAGES_CREATE}>
+            <button
+              onClick={handleNewMessage}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              <span className={`${comfortaa.className} font-semibold`}>Nova Mensagem</span>
+            </button>
+          </Can>
         </div>
       </div>
 
@@ -394,5 +399,6 @@ export default function MessagesPage() {
         </div>
       )}
     </div>
+    </ProtectedPage>
   )
 }
