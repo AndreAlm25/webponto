@@ -1,10 +1,15 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+
 export default function TerminalPage() {
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Terminal de Ponto</h1>
-      <p className="text-muted-foreground mt-2">Em desenvolvimento...</p>
-    </div>
-  )
+  const router = useRouter()
+  const { company } = useParams<{ company: string }>()
+
+  useEffect(() => {
+    router.replace(`/admin/${company}/terminal-de-ponto`)
+  }, [company, router])
+
+  return null
 }

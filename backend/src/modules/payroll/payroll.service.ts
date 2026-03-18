@@ -686,13 +686,32 @@ export class PayrollService {
       vacationDaysByEmployee.set(period.vacation.employeeId, current + days)
     }
 
+    // Buscar solicitações de férias aprovadas cujo início cai neste mês (para pagamento de férias)
+    const vacationRequests = await this.prisma.vacationRequest.findMany({
+      where: {
+        companyId: payroll.companyId,
+        status: { in: ['COMPLETED', 'AWAITING_SIGNATURE', 'EMPLOYEE_SIGNED'] },
+        requestedStartDate: { gte: startOfMonth, lte: endOfMonth },
+      },
+    })
+    // Agrupar dados de pagamento de férias por funcionário
+    const vacationPayDataByEmployee = new Map<string, { days: number; sellDays: number }>()
+    for (const req of vacationRequests) {
+      const current = vacationPayDataByEmployee.get(req.employeeId) || { days: 0, sellDays: 0 }
+      vacationPayDataByEmployee.set(req.employeeId, {
+        days: current.days + (req.requestedDays || 0),
+        sellDays: current.sellDays + (req.sellDays || 0),
+      })
+    }
+
     // Gerar/atualizar holerite de cada funcionário
     for (const employee of employees) {
       const entries = entriesByEmployee.get(employee.id) || []
       const employeeAdvances = advancesByEmployee.get(employee.id) || []
       const justifiedAbsenceDays = justifiedDaysByEmployee.get(employee.id) || 0
       const vacationDaysInMonth = vacationDaysByEmployee.get(employee.id) || 0
-      const payslipData = this.calculatePayslip(employee, entries, payroll.referenceMonth, payroll.referenceYear, config, employeeAdvances, justifiedAbsenceDays, vacationDaysInMonth)
+      const vacationPayData = vacationPayDataByEmployee.get(employee.id) || { days: 0, sellDays: 0 }
+      const payslipData = this.calculatePayslip(employee, entries, payroll.referenceMonth, payroll.referenceYear, config, employeeAdvances, justifiedAbsenceDays, vacationDaysInMonth, vacationPayData)
 
       // Verificar se já existe holerite
       const existingPayslip = payroll.payslips.find((p) => p.employeeId === employee.id)
@@ -794,7 +813,7 @@ export class PayrollService {
   }
 
   // Calcular dados do holerite de um funcionário
-  private calculatePayslip(employee: any, entries: any[], month: number, year: number, config: any, advances: any[] = [], justifiedAbsenceDays: number = 0, vacationDaysInMonth: number = 0) {
+  private calculatePayslip(employee: any, entries: any[], month: number, year: number, config: any, advances: any[] = [], justifiedAbsenceDays: number = 0, vacationDaysInMonth: number = 0, vacationPayData: { days: number; sellDays: number } = { days: 0, sellDays: 0 }) {
     const baseSalary = Number(employee.baseSalary)
     
     // NOVO: Calcular horas/dia baseado no horário do funcionário
@@ -864,8 +883,23 @@ export class PayrollService {
       }
     }
 
+    // Calcular pagamento de férias (CLT: salário/30 × dias + 1/3 constitucional)
+    let vacationPayValue = 0      // Remuneração dos dias de férias
+    let vacationBonusValue = 0    // 1/3 constitucional
+    let vacationSellValue = 0     // Venda de 1/3 dos dias (abono pecuniário)
+    if (vacationPayData.days > 0) {
+      const dailyRate = baseSalary / 30
+      vacationPayValue = dailyRate * vacationPayData.days
+      vacationBonusValue = vacationPayValue / 3
+    }
+    if (vacationPayData.sellDays > 0) {
+      const dailyRate = baseSalary / 30
+      vacationSellValue = (dailyRate * vacationPayData.sellDays) + ((dailyRate * vacationPayData.sellDays) / 3)
+    }
+    const totalVacationEarnings = vacationPayValue + vacationBonusValue + vacationSellValue
+
     // Proventos totais
-    const totalEarnings = baseSalary + overtimeValue50 + overtimeValue100 + customEarnings
+    const totalEarnings = baseSalary + overtimeValue50 + overtimeValue100 + customEarnings + totalVacationEarnings
 
     // Calcular INSS (se habilitado)
     let inssBase = 0
@@ -998,6 +1032,12 @@ export class PayrollService {
       unhealthyPay: 0,
       bonus: 0,
       otherEarnings: customEarnings,
+      vacationDays: vacationPayData.days,
+      vacationPayValue,
+      vacationBonusValue,
+      vacationSellDays: vacationPayData.sellDays,
+      vacationSellValue,
+      totalVacationEarnings,
       totalEarnings,
       absenceDays,
       absenceValue,
@@ -1785,8 +1825,20 @@ export class PayrollService {
       vacationDaysInMonth += days
     }
 
+    // Buscar solicitações de férias aprovadas cujo início cai neste mês (pagamento de férias)
+    const vacationRequests = await this.prisma.vacationRequest.findMany({
+      where: {
+        employeeId,
+        status: { in: ['COMPLETED', 'AWAITING_SIGNATURE', 'EMPLOYEE_SIGNED'] },
+        requestedStartDate: { gte: startOfMonth, lte: endOfMonth },
+      },
+    })
+    const vacationPayData = vacationRequests.reduce(
+      (acc, req) => ({ days: acc.days + (req.requestedDays || 0), sellDays: acc.sellDays + (req.sellDays || 0) }),
+      { days: 0, sellDays: 0 }
+    )
+
     // Calcular dados do holerite usando o método existente
-    // O método calculatePayslip espera: (employee, entries, month, year, config, advances, justifiedAbsenceDays, vacationDaysInMonth)
     const payslipData = this.calculatePayslip(
       employee,
       employee.timeEntries || [],
@@ -1795,7 +1847,8 @@ export class PayrollService {
       config,
       advances,
       justifiedAbsenceDays,
-      vacationDaysInMonth
+      vacationDaysInMonth,
+      vacationPayData
     )
 
     // Verificar se já existe holerite oficial para este mês

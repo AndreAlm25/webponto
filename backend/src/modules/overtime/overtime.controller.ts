@@ -42,6 +42,19 @@ export class OvertimeController {
   }
 
   /**
+   * GET /api/overtime/time-bank?companyId=xxx&employeeId=xxx
+   * Banco de horas: saldo consolidado por funcionário
+   */
+  @Get('time-bank')
+  @RequirePermission('overtime.view')
+  async bancoDeHoras(
+    @Query('companyId') companyId: string,
+    @Query('employeeId') employeeId?: string,
+  ) {
+    return this.overtimeService.bancodeHoras(companyId, employeeId);
+  }
+
+  /**
    * PATCH /api/overtime/:id/approve
    * Aprovar hora extra
    */

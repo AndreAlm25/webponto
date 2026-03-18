@@ -162,6 +162,17 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 )}
                 {hasPermission(PERMISSIONS.OVERTIME_VIEW) && (
                   <button
+                    onClick={() => router.push(`${base}/banco-de-horas`)}
+                    className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                      isActive(`${base}/banco-de-horas`) ? 'bg-muted/50 font-medium' : ''
+                    }`}
+                  >
+                    <ClockIcon className="h-3 w-3 mr-2" />
+                    <span>Banco de Horas</span>
+                  </button>
+                )}
+                {hasPermission(PERMISSIONS.OVERTIME_VIEW) && (
+                  <button
                     onClick={() => router.push(`${base}/analises/hora-extra`)}
                     className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
                       isActive(`${base}/analises/hora-extra`) ? 'bg-muted/50 font-medium' : ''
@@ -231,6 +242,20 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 >
                   <FileText className="h-4 w-4 mr-2" />
                   <span>Espelho de Ponto</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.OVERTIME_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/banco-de-horas`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/banco-de-horas`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <ClockIcon className="h-4 w-4 mr-2" />
+                  <span>Banco de Horas</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.OVERTIME_VIEW) && (

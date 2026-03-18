@@ -25,6 +25,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { HolidaysModule } from './modules/holidays/holidays.module';
 import { CompanyModule } from './modules/company/company.module';
 import { VacationsModule } from './modules/vacations/vacations.module';
+import { SuperAdminModule } from './modules/superadmin/superadmin.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { VacationsModule } from './modules/vacations/vacations.module';
     HolidaysModule,
     CompanyModule,
     VacationsModule,
+    SuperAdminModule,
     SeedModule,
     FilesModule,
   ],

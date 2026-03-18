@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, ForbiddenException 
 import { PrismaService } from '../../prisma/prisma.service'
 import { createHash } from 'crypto'
 import { EventsGateway } from '../../events/events.gateway'
+import { EmailService } from '../../common/email.service'
 
 interface VacationPeriodInput {
   startDate: string
@@ -19,6 +20,7 @@ export class VacationRequestsService {
   constructor(
     private prisma: PrismaService,
     private eventsGateway: EventsGateway,
+    private emailService: EmailService,
   ) {}
 
   // Helper para criar notificações
@@ -816,6 +818,17 @@ export class VacationRequestsService {
       `Sua solicitação de férias foi aprovada! Acesse o sistema para assinar o aviso.`,
     )
 
+    // Email ao funcionário
+    const employeeEmail = request.employee?.user?.email
+    const employeeName = request.employee?.user?.name || 'Funcionário'
+    if (employeeEmail) {
+      const startDate = new Date(request.requestedStartDate).toLocaleDateString('pt-BR')
+      const endDate = new Date(
+        new Date(request.requestedStartDate).getTime() + (request.requestedDays - 1) * 86400000
+      ).toLocaleDateString('pt-BR')
+      this.emailService.sendVacationApproved(employeeEmail, employeeName, startDate, endDate, request.requestedDays)
+    }
+
     // Emitir evento WebSocket para atualizar painel do funcionário em tempo real
     this.eventsGateway.emitVacationRequestUpdated(companyId, updated)
 
@@ -914,6 +927,13 @@ export class VacationRequestsService {
       'Férias Rejeitadas',
       `Sua solicitação de férias foi rejeitada. Motivo: ${reason}`,
     )
+
+    // Email ao funcionário
+    const rejEmail = request.employee?.user?.email
+    const rejName = request.employee?.user?.name || 'Funcionário'
+    if (rejEmail) {
+      this.emailService.sendVacationRejected(rejEmail, rejName, reason)
+    }
 
     // Emitir evento WebSocket para atualizar painel do funcionário em tempo real
     this.eventsGateway.emitVacationRequestUpdated(companyId, updated)

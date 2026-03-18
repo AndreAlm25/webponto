@@ -367,6 +367,59 @@ export default function PayrollPage({ params }: { params: { company: string } })
     }
   }
 
+  // Exportar folha para contabilidade (CSV)
+  const handleExportCSV = () => {
+    if (!payroll?.payslips?.length) { toast.error('Nenhum holerite para exportar'); return }
+    const rows = [
+      ['Matrícula', 'Nome', 'Cargo', 'Departamento', 'Salário Base', 'Dias Trabalhados',
+       'H.Extra 50%', 'Valor H.Extra 50%', 'H.Extra 100%', 'Valor H.Extra 100%',
+       'Férias (dias)', 'Valor Férias', '1/3 Constitucional', 'Outros Proventos', 'Total Proventos',
+       'Faltas', 'Valor Faltas', 'INSS', 'IR', 'VT', 'VR', 'Plano Saúde', 'Odonto',
+       'Adiantamento', 'Outros Descontos', 'Total Descontos',
+       'FGTS (empresa)', 'Salário Líquido', 'Status'],
+      ...payroll.payslips.map((p: any) => [
+        p.employeeRegistration,
+        p.employeeName,
+        p.employeePosition || '',
+        p.employeeDepartment || '',
+        p.baseSalary.toFixed(2),
+        p.workedDays,
+        (p.overtimeHours50 || 0).toFixed(2),
+        (p.overtimeValue50 || 0).toFixed(2),
+        (p.overtimeHours100 || 0).toFixed(2),
+        (p.overtimeValue100 || 0).toFixed(2),
+        (p.vacationDays || 0),
+        (p.vacationPayValue || 0).toFixed(2),
+        (p.vacationBonusValue || 0).toFixed(2),
+        (p.otherEarnings || 0).toFixed(2),
+        p.totalEarnings.toFixed(2),
+        p.absenceDays,
+        p.absenceValue.toFixed(2),
+        p.inssValue.toFixed(2),
+        p.irValue.toFixed(2),
+        p.transportVoucher.toFixed(2),
+        p.mealVoucher.toFixed(2),
+        p.healthInsurance.toFixed(2),
+        p.dentalInsurance.toFixed(2),
+        p.advancePayment.toFixed(2),
+        p.otherDeductions.toFixed(2),
+        p.totalDeductions.toFixed(2),
+        p.fgtsValue.toFixed(2),
+        p.netSalary.toFixed(2),
+        p.status,
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `folha-${MONTH_NAMES[currentMonth - 1]}-${currentYear}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Folha exportada com sucesso!')
+  }
+
   // Aprovar holerites selecionados
   const handleApproveSelected = async () => {
     if (selectedPayslipIds.length === 0) {
@@ -699,6 +752,13 @@ export default function PayrollPage({ params }: { params: { company: string } })
               Marcar como Paga
             </Button>
           </Can>
+        )}
+
+        {payroll?.payslips?.length > 0 && (
+          <Button variant="outline" onClick={handleExportCSV}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
         )}
 
         <Button variant="outline" onClick={fetchPayroll}>

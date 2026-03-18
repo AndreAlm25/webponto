@@ -189,6 +189,66 @@ export class OvertimeService {
   }
 
   /**
+   * Banco de Horas: saldo consolidado por funcionário
+   */
+  async bancodeHoras(companyId: string, employeeId?: string) {
+    const where: any = { companyId, isOvertime: true, overtimeStatus: OvertimeStatus.APPROVED }
+    if (employeeId) where.employeeId = employeeId
+
+    const entries = await this.prisma.timeEntry.findMany({
+      where,
+      select: {
+        employeeId: true,
+        overtimeMinutes: true,
+        overtimeType: true,
+        overtimeRate: true,
+        timestamp: true,
+        employee: {
+          select: {
+            id: true,
+            registrationId: true,
+            allowTimeBank: true,
+            user: { select: { name: true, avatarUrl: true } },
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+    })
+
+    // Agrupar por funcionário
+    const byEmployee = new Map<string, any>()
+    for (const e of entries) {
+      if (!byEmployee.has(e.employeeId)) {
+        byEmployee.set(e.employeeId, {
+          employeeId: e.employeeId,
+          employeeName: e.employee.user?.name || '',
+          registrationId: e.employee.registrationId,
+          position: e.employee.position?.name || null,
+          department: e.employee.department?.name || null,
+          avatarUrl: e.employee.user?.avatarUrl || null,
+          allowTimeBank: e.employee.allowTimeBank,
+          totalMinutes: 0,
+          entries50: 0,
+          entries100: 0,
+          lastEntry: null,
+        })
+      }
+      const emp = byEmployee.get(e.employeeId)
+      emp.totalMinutes += e.overtimeMinutes || 0
+      const rate = Number(e.overtimeRate) || 1.5
+      if (rate >= 2) emp.entries100 += e.overtimeMinutes || 0
+      else emp.entries50 += e.overtimeMinutes || 0
+      if (!emp.lastEntry || new Date(e.timestamp) > new Date(emp.lastEntry)) {
+        emp.lastEntry = e.timestamp
+      }
+    }
+
+    return Array.from(byEmployee.values()).sort((a, b) => b.totalMinutes - a.totalMinutes)
+  }
+
+  /**
    * Aprovar múltiplas horas extras em lote
    */
   async aprovarEmLote(timeEntryIds: string[], userId: string) {
