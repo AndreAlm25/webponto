@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
+import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -223,21 +226,26 @@ export default function AuditoriaPage() {
     return ACTION_COLORS[action.toLowerCase()] || 'bg-gray-100 text-gray-800'
   }
 
+  const params = useParams<{ company: string }>()
+  const company = params?.company
+  const base = company ? `/admin/${encodeURIComponent(company)}` : '/admin'
+
   return (
     <ProtectedPage permission={PERMISSIONS.AUDIT_VIEW}>
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileText className="h-6 w-6" />
-            Logs de Auditoria
-          </h1>
-          <p className="text-muted-foreground">
-            Histórico de todas as ações realizadas no sistema
-          </p>
-        </div>
+    <PageContainer>
+      <PageHeader
+        title="Logs de Auditoria"
+        description="Histórico de todas as ações realizadas no sistema"
+        icon={<FileText className="h-6 w-6" />}
+        breadcrumbs={[
+          { label: 'Admin', href: base },
+          { label: 'Configurações' },
+          { label: 'Auditoria' },
+        ]}
+      />
 
+      {/* Header com botão */}
+      <div className="mt-6 flex items-center justify-end mb-4">
         <Button variant="outline" onClick={() => fetchLogs(pagination.page)} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
@@ -484,7 +492,7 @@ export default function AuditoriaPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
     </ProtectedPage>
   )
 }

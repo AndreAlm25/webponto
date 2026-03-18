@@ -28,6 +28,18 @@ export class EmployeesController {
     return this.employeesService.listEmployees(companyId)
   }
 
+  // GET /api/employees/:id
+  // Busca funcionário por ID (para edição)
+  @Get(':id')
+  @RequirePermission('employees.view')
+  async getEmployeeById(@Param('id') id: string) {
+    const employee = await this.employeesService.getEmployeeById(id)
+    if (!employee) {
+      return { success: false, message: 'Funcionário não encontrado' }
+    }
+    return employee
+  }
+
   // GET /api/employees/:id/facial-status
   // Retorna se o funcionário possui face cadastrada
   @Get(':id/facial-status')
@@ -44,7 +56,7 @@ export class EmployeesController {
     @Param('id') id: string,
     @Body() body: any,
   ) {
-    // body pode conter: status, allowRemoteClockIn, allowFacialRecognition, requireLiveness, requireGeolocation, minGeoAccuracyMeters
+    // body pode conter: status, allowRemoteClockIn, allowFacialRecognition, requireLiveness, geofenceId
     return this.employeesService.updateEmployee(id, body)
   }
 

@@ -17,6 +17,7 @@ import { IconButton } from '@/components/ui/IconButton'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { toast } from 'sonner'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 
@@ -262,7 +263,7 @@ export default function GeofencesCompanyPage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.GEOFENCES_VIEW}>
-    <div className="p-4 space-y-6">
+    <PageContainer>
       <PageHeader
         title="Cercas Geográficas"
         description="Gerencie as cercas geográficas da empresa"
@@ -274,7 +275,7 @@ export default function GeofencesCompanyPage() {
         ]}
       />
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="mt-6 grid gap-4 md:gap-6 md:grid-cols-3">
         <div className="md:col-span-1 space-y-3">
           <InputField
             label="Nome do ponto"
@@ -464,7 +465,7 @@ export default function GeofencesCompanyPage() {
         icon={Trash2}
         variant="danger"
       />
-    </div>
+    </PageContainer>
     </ProtectedPage>
   )
 }

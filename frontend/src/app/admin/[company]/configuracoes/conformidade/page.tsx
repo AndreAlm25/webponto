@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { Scale, AlertTriangle, Save } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
@@ -148,7 +149,7 @@ export default function CompliancePage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
-    <div className="p-6">
+    <PageContainer>
       <PageHeader
         title="Conformidade CLT"
         description="Configure o nível de conformidade da empresa"
@@ -160,7 +161,7 @@ export default function CompliancePage() {
         ]}
       />
 
-      <div className="mt-6 max-w-4xl">
+      <div className="mt-6 space-y-6">
         {/* Nível de Conformidade */}
         <div className="bg-background border border-border rounded-lg p-6 mb-6">
           <h3 className="text-lg font-semibold mb-4">Nível de Conformidade</h3>
@@ -490,7 +491,7 @@ export default function CompliancePage() {
           </button>
         </div>
       </div>
-    </div>
+    </PageContainer>
     </ProtectedPage>
   )
 }

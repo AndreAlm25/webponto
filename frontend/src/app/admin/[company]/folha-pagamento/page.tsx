@@ -3,8 +3,10 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { notFound } from 'next/navigation'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
+import { useWebSocket } from '@/contexts/WebSocketContext'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 import { Button } from '@/components/ui/button'
@@ -33,6 +35,9 @@ import {
   Receipt,
   PiggyBank,
   Settings,
+  ThumbsUp,
+  ThumbsDown,
+  AlertTriangle,
 } from 'lucide-react'
 
 // Tipos
@@ -103,9 +108,29 @@ interface Payslip {
   grossSalary: number
   netSalary: number
   status: string
+  // Campos de aceite/rejeição
+  acceptedAt?: string
+  rejectedAt?: string
+  rejectionReason?: string
+  // Campos extras
+  overtimeValue?: number
+  bonusValue?: number
   employee?: {
     user?: { name: string; avatarUrl: string | null }
   }
+  // Parcelas de pagamento
+  installments?: PayslipInstallment[]
+}
+
+interface PayslipInstallment {
+  id: string
+  installmentNumber: number
+  totalInstallments: number
+  percentage: number
+  amount: number
+  dueDate: string
+  paidAt: string | null
+  paidBy: string | null
 }
 
 // Nomes dos meses em português
@@ -145,6 +170,14 @@ export default function PayrollPage({ params }: { params: { company: string } })
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedPayslip, setSelectedPayslip] = useState<Payslip | null>(null)
   const [showPayslipModal, setShowPayslipModal] = useState(false)
+  const [selectedPayslipIds, setSelectedPayslipIds] = useState<string[]>([])
+  const [isApproving, setIsApproving] = useState(false)
+  const [isPaying, setIsPaying] = useState(false)
+  const [showRejectedModal, setShowRejectedModal] = useState(false)
+  const [rejectedPayslip, setRejectedPayslip] = useState<Payslip | null>(null)
+  const [isReapproving, setIsReapproving] = useState(false)
+  const [overdueInstallments, setOverdueInstallments] = useState<any[]>([])
+  const [overdueCount, setOverdueCount] = useState(0)
   
   if (!company) notFound()
   
@@ -184,6 +217,68 @@ export default function PayrollPage({ params }: { params: { company: string } })
   useEffect(() => {
     fetchPayroll()
   }, [fetchPayroll])
+
+  // Buscar parcelas atrasadas
+  const fetchOverdueInstallments = useCallback(async () => {
+    if (!companyId) return
+    
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/overdue-installments?companyId=${companyId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        setOverdueInstallments(data.installments || [])
+        setOverdueCount(data.overdueCount || 0)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar parcelas atrasadas:', error)
+    }
+  }, [companyId])
+
+  useEffect(() => {
+    fetchOverdueInstallments()
+  }, [fetchOverdueInstallments])
+
+  // WebSocket: Atualizar quando funcionário aceitar/rejeitar holerite
+  const { connected, onPayslipAccepted, onPayslipRejected, onPayslipPaid } = useWebSocket()
+  
+  useEffect(() => {
+    if (!connected) return
+
+    // Quando funcionário aceita holerite
+    const unsubAccepted = onPayslipAccepted((payslip) => {
+      console.log('[WebSocket] 📥 payslip-accepted:', payslip.id)
+      fetchPayroll() // Recarregar folha
+      toast.success('Holerite aceito!', {
+        description: `${payslip.employeeName || 'Funcionário'} aceitou o holerite`
+      })
+    })
+
+    // Quando funcionário rejeita holerite
+    const unsubRejected = onPayslipRejected((payslip) => {
+      console.log('[WebSocket] 📥 payslip-rejected:', payslip.id)
+      fetchPayroll()
+      toast.warning('Holerite rejeitado!', {
+        description: `${payslip.employeeName || 'Funcionário'} rejeitou o holerite`
+      })
+    })
+
+    // Quando holerite é pago
+    const unsubPaid = onPayslipPaid((payslip) => {
+      console.log('[WebSocket] 📥 payslip-paid:', payslip.id)
+      fetchPayroll()
+    })
+
+    return () => {
+      unsubAccepted()
+      unsubRejected()
+      unsubPaid()
+    }
+  }, [connected, onPayslipAccepted, onPayslipRejected, onPayslipPaid, fetchPayroll])
 
   // Gerar holerites
   const handleGenerate = async () => {
@@ -272,6 +367,84 @@ export default function PayrollPage({ params }: { params: { company: string } })
     }
   }
 
+  // Aprovar holerites selecionados
+  const handleApproveSelected = async () => {
+    if (selectedPayslipIds.length === 0) {
+      toast.error('Selecione pelo menos um holerite')
+      return
+    }
+    
+    setIsApproving(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/payslips/approve`,
+        {
+          method: 'POST',
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ payslipIds: selectedPayslipIds }),
+        }
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        toast.success(data.message || 'Holerites aprovados!')
+        setSelectedPayslipIds([])
+        fetchPayroll()
+      } else {
+        const error = await response.json()
+        toast.error(error.message || 'Erro ao aprovar holerites')
+      }
+    } catch (error) {
+      console.error('Erro ao aprovar holerites:', error)
+      toast.error('Erro ao aprovar holerites')
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
+  // Pagar holerites selecionados
+  const handlePaySelected = async () => {
+    if (selectedPayslipIds.length === 0) {
+      toast.error('Selecione pelo menos um holerite')
+      return
+    }
+    
+    setIsPaying(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/payslips/pay`,
+        {
+          method: 'POST',
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ payslipIds: selectedPayslipIds }),
+        }
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        toast.success(data.message || 'Holerites pagos!')
+        setSelectedPayslipIds([])
+        fetchPayroll()
+      } else {
+        const error = await response.json()
+        toast.error(error.message || 'Erro ao pagar holerites')
+      }
+    } catch (error) {
+      console.error('Erro ao pagar holerites:', error)
+      toast.error('Erro ao pagar holerites')
+    } finally {
+      setIsPaying(false)
+    }
+  }
+
   // Navegar entre meses
   const goToPreviousMonth = () => {
     if (currentMonth === 1) {
@@ -291,49 +464,142 @@ export default function PayrollPage({ params }: { params: { company: string } })
     }
   }
 
-  // Filtrar holerites
+  // Filtrar holerites (DEVE vir antes das variáveis que dependem dele)
   const filteredPayslips = payroll?.payslips?.filter((p) =>
     p.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.employeeRegistration.toLowerCase().includes(searchTerm.toLowerCase())
   ) || []
 
+  // Toggle seleção de holerite (só permite selecionar se não for PAID)
+  const togglePayslipSelection = (payslipId: string) => {
+    const payslip = filteredPayslips.find(p => p.id === payslipId)
+    if (payslip?.status === 'PAID') return // Não permite selecionar PAID
+    
+    setSelectedPayslipIds(prev => 
+      prev.includes(payslipId) 
+        ? prev.filter(id => id !== payslipId)
+        : [...prev, payslipId]
+    )
+  }
+
+  // Holerites que podem ser selecionados (não PAID)
+  const selectablePayslips = filteredPayslips.filter(p => p.status !== 'PAID')
+  
+  // Verificar se todos estão pagos
+  const allPaid = filteredPayslips.length > 0 && filteredPayslips.every(p => p.status === 'PAID')
+  
+  // Holerites selecionados que podem ser aprovados (status CALCULATED)
+  const selectedForApproval = selectedPayslipIds.filter(id => {
+    const p = filteredPayslips.find(ps => ps.id === id)
+    return p?.status === 'CALCULATED'
+  })
+  
+  // Holerites selecionados que podem ser pagos (status ACCEPTED)
+  const selectedForPayment = selectedPayslipIds.filter(id => {
+    const p = filteredPayslips.find(ps => ps.id === id)
+    return p?.status === 'ACCEPTED'
+  })
+
+  // Selecionar todos os holerites que podem ser selecionados
+  const toggleSelectAll = () => {
+    if (selectedPayslipIds.length === selectablePayslips.length) {
+      setSelectedPayslipIds([])
+    } else {
+      setSelectedPayslipIds(selectablePayslips.map(p => p.id))
+    }
+  }
+
   // Abrir modal de holerite
   const openPayslipModal = (payslip: Payslip) => {
-    // Debug: verificar dados do holerite
-    console.log('=== DADOS DO HOLERITE ===')
-    console.log('Funcionário:', payslip.employeeName)
-    console.log('Salário Base:', payslip.baseSalary)
-    console.log('Total Proventos:', payslip.totalEarnings)
-    console.log('INSS:', payslip.inssValue, '(', payslip.inssRate, '%)')
-    console.log('IR:', payslip.irValue, '(', payslip.irRate, '%)')
-    console.log('Vale-Transporte:', payslip.transportVoucher)
-    console.log('Vale-Refeição:', payslip.mealVoucher)
-    console.log('Plano Saúde:', payslip.healthInsurance)
-    console.log('Plano Odonto:', payslip.dentalInsurance)
-    console.log('Faltas:', payslip.absenceDays, 'dias =', payslip.absenceValue)
-    console.log('Total Descontos:', payslip.totalDeductions)
-    console.log('Líquido:', payslip.netSalary)
-    console.log('=========================')
-    
     setSelectedPayslip(payslip)
     setShowPayslipModal(true)
   }
 
+  // Abrir modal de holerite rejeitado
+  const openRejectedPayslipModal = (payslip: Payslip) => {
+    setRejectedPayslip(payslip)
+    setShowRejectedModal(true)
+  }
+
+  // Reaprovar holerite rejeitado
+  const handleReapprove = async () => {
+    if (!rejectedPayslip) return
+    
+    setIsReapproving(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/payslip/${rejectedPayslip.id}/reapprove`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+      
+      if (response.ok) {
+        toast.success('Holerite reaprovado com sucesso!')
+        setShowRejectedModal(false)
+        setRejectedPayslip(null)
+        fetchPayroll()
+      } else {
+        const error = await response.json()
+        toast.error(error.message || 'Erro ao reaprovar holerite')
+      }
+    } catch (error) {
+      console.error('Erro ao reaprovar holerite:', error)
+      toast.error('Erro ao reaprovar holerite')
+    } finally {
+      setIsReapproving(false)
+    }
+  }
+
   return (
     <ProtectedPage permission={PERMISSIONS.PAYROLL_VIEW}>
-      <PageHeader
-        title="Folha de Pagamento"
-        description="Gerencie a folha de pagamento dos funcionários"
-        icon={<Wallet className="h-6 w-6" />}
-        breadcrumbs={[
-          { label: 'Admin', href: base },
-          { label: 'G. de Colaboradores' },
-          { label: 'Folha de Pagamento' }
-        ]}
-      />
+      <PageContainer>
+        <PageHeader
+          title="Folha de Pagamento"
+          description="Gerencie a folha de pagamento dos funcionários"
+          icon={<Wallet className="h-6 w-6" />}
+          breadcrumbs={[
+            { label: 'Admin', href: base },
+            { label: 'G. de Colaboradores' },
+            { label: 'Folha de Pagamento' }
+          ]}
+        />
 
-      {/* Navegação de Mês */}
-      <div className="flex items-center justify-between mb-6">
+        {/* Alerta de Parcelas Atrasadas */}
+        {overdueCount > 0 && (
+          <div className="mt-6 p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-800 dark:text-red-400">
+                  {overdueCount} parcela{overdueCount > 1 ? 's' : ''} de pagamento atrasada{overdueCount > 1 ? 's' : ''}
+                </h3>
+                <div className="mt-2 space-y-1">
+                  {overdueInstallments.slice(0, 5).map((inst: any) => (
+                    <div key={inst.id} className="text-sm text-red-700 dark:text-red-300 flex items-center justify-between">
+                      <span>
+                        <strong>{inst.employeeName}</strong> - Parcela {inst.installmentNumber}/{inst.totalInstallments}
+                      </span>
+                      <span className="text-xs">
+                        {formatCurrency(inst.amount)} • {inst.daysOverdue} dia{inst.daysOverdue > 1 ? 's' : ''} atrasado
+                      </span>
+                    </div>
+                  ))}
+                  {overdueCount > 5 && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      E mais {overdueCount - 5} parcela{overdueCount - 5 > 1 ? 's' : ''} atrasada{overdueCount - 5 > 1 ? 's' : ''}...
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navegação de Mês */}
+        <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
             <ChevronLeft className="h-4 w-4" />
@@ -484,74 +750,229 @@ export default function PayrollPage({ params }: { params: { company: string } })
             <p className="text-sm">Clique em "Gerar Holerites" para calcular a folha</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium">Funcionário</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">Cargo</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium">Salário Base</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium">Proventos</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium">Descontos</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium">Líquido</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredPayslips.map((payslip) => (
-                  <tr key={payslip.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium">{payslip.employeeName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Matrícula: {payslip.employeeRegistration}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {payslip.employeePosition || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm">
-                      {formatCurrency(payslip.baseSalary)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-green-600">
-                      {formatCurrency(payslip.totalEarnings)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-red-600">
-                      {formatCurrency(payslip.totalDeductions)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold">
-                      {formatCurrency(payslip.netSalary)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openPayslipModal(payslip)}
+          <>
+            {/* Barra de ações para selecionados - só mostra se não estiver tudo pago */}
+            {!allPaid && selectedPayslipIds.length > 0 && (
+              <div className="mb-4 p-3 bg-primary/10 rounded-lg flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {selectedPayslipIds.length} holerite(s) selecionado(s)
+                </span>
+                <div className="flex gap-2">
+                  {/* Botão Aprovar - só mostra se há holerites CALCULATED selecionados */}
+                  {selectedForApproval.length > 0 && (
+                    <Can permission={PERMISSIONS.PAYROLL_APPROVE}>
+                      <Button 
+                        size="sm" 
+                        onClick={handleApproveSelected}
+                        disabled={isApproving}
+                        className="bg-green-600 hover:bg-green-700"
                       >
-                        <Eye className="h-4 w-4" />
+                        {isApproving ? (
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                        )}
+                        Aprovar ({selectedForApproval.length})
                       </Button>
-                    </td>
+                    </Can>
+                  )}
+                  {/* Botão Pagar - só mostra se há holerites ACCEPTED selecionados */}
+                  {selectedForPayment.length > 0 && (
+                    <Can permission={PERMISSIONS.PAYROLL_PAY}>
+                      <Button 
+                        size="sm" 
+                        onClick={handlePaySelected}
+                        disabled={isPaying}
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        {isPaying ? (
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Banknote className="h-4 w-4 mr-2" />
+                        )}
+                        Pagar ({selectedForPayment.length})
+                      </Button>
+                    </Can>
+                  )}
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => setSelectedPayslipIds([])}
+                  >
+                    Limpar Seleção
+                  </Button>
+                </div>
+              </div>
+            )}
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-muted/50">
+                  <tr>
+                    {/* Coluna de checkbox - só mostra se não estiver tudo pago */}
+                    {!allPaid && (
+                      <th className="px-4 py-3 text-center w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedPayslipIds.length === selectablePayslips.length && selectablePayslips.length > 0}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </th>
+                    )}
+                    <th className="px-4 py-3 text-left text-sm font-medium">Funcionário</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium">Cargo</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium">Salário Base</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium">Proventos</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium">Descontos</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium">Líquido</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium">Parcelas</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium">Status</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-muted/50 font-semibold">
-                <tr>
-                  <td colSpan={3} className="px-4 py-3 text-right">TOTAIS:</td>
-                  <td className="px-4 py-3 text-right text-green-600">
-                    {formatCurrency(payroll?.totalGross || 0)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-red-600">
-                    {formatCurrency(payroll?.totalDeductions || 0)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {formatCurrency(payroll?.totalNet || 0)}
-                  </td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredPayslips.map((payslip) => (
+                    <tr 
+                      key={payslip.id} 
+                      className={`hover:bg-muted/30 transition-colors ${
+                        selectedPayslipIds.includes(payslip.id) ? 'bg-primary/5' : ''
+                      } ${payslip.status === 'REJECTED' ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
+                    >
+                      {/* Checkbox - só mostra se não estiver tudo pago e se este não for PAID */}
+                      {!allPaid && (
+                        <td className="px-4 py-3 text-center">
+                          {payslip.status !== 'PAID' ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedPayslipIds.includes(payslip.id)}
+                              onChange={() => togglePayslipSelection(payslip.id)}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                      )}
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-medium">{payslip.employeeName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Matrícula: {payslip.employeeRegistration}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {payslip.employeePosition || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm">
+                        {formatCurrency(payslip.baseSalary)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-green-600">
+                        {formatCurrency(payslip.totalEarnings)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-red-600">
+                        {formatCurrency(payslip.totalDeductions)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {formatCurrency(payslip.netSalary)}
+                      </td>
+                      {/* Coluna de Parcelas */}
+                      <td className="px-4 py-3 text-center">
+                        {payslip.installments && payslip.installments.length > 0 ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center gap-1">
+                              {payslip.installments.map((inst, idx) => (
+                                <div
+                                  key={inst.id}
+                                  className={`w-3 h-3 rounded-full ${
+                                    inst.paidAt ? 'bg-emerald-500' : 'bg-gray-300'
+                                  }`}
+                                  title={`Parcela ${inst.installmentNumber}: ${formatCurrency(inst.amount)} - ${
+                                    inst.paidAt ? 'Pago' : `Vence ${new Date(inst.dueDate).toLocaleDateString('pt-BR')}`
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {payslip.installments.filter(i => i.paidAt).length}/{payslip.installments.length}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                          payslip.status === 'PAID' ? 'bg-emerald-500/10 text-emerald-500' :
+                          payslip.status === 'ACCEPTED' ? 'bg-teal-500/10 text-teal-500' :
+                          payslip.status === 'REJECTED' ? 'bg-red-500/10 text-red-500' :
+                          payslip.status === 'APPROVED' ? 'bg-green-500/10 text-green-500' :
+                          payslip.status === 'CALCULATED' ? 'bg-blue-500/10 text-blue-500' :
+                          'bg-gray-500/10 text-gray-500'
+                        }`}>
+                          {payslip.status === 'PAID' ? 'Pago' :
+                           payslip.status === 'ACCEPTED' ? (
+                             <>
+                               <ThumbsUp className="h-3 w-3" />
+                               Aceito
+                             </>
+                           ) :
+                           payslip.status === 'REJECTED' ? (
+                             <>
+                               <ThumbsDown className="h-3 w-3" />
+                               Rejeitado
+                             </>
+                           ) :
+                           payslip.status === 'APPROVED' ? 'Aprovado' :
+                           payslip.status === 'CALCULATED' ? 'Calculado' :
+                           'Pendente'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openPayslipModal(payslip)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {/* Botão especial para holerite rejeitado */}
+                          {payslip.status === 'REJECTED' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => openRejectedPayslipModal(payslip)}
+                              title="Ver motivo da rejeição"
+                            >
+                              <AlertTriangle className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-muted/50 font-semibold">
+                  <tr>
+                    <td colSpan={4} className="px-4 py-3 text-right">TOTAIS:</td>
+                    <td className="px-4 py-3 text-right text-green-600">
+                      {formatCurrency(payroll?.totalGross || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-red-600">
+                      {formatCurrency(payroll?.totalDeductions || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {formatCurrency(payroll?.totalNet || 0)}
+                    </td>
+                    <td colSpan={3}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -567,6 +988,191 @@ export default function PayrollPage({ params }: { params: { company: string } })
           }}
         />
       )}
+
+      {/* Modal de Holerite Rejeitado */}
+      {showRejectedModal && rejectedPayslip && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-border bg-red-50 dark:bg-red-950/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full bg-red-500/10">
+                    <ThumbsDown className="h-5 w-5 text-red-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">
+                      Holerite Rejeitado
+                    </h2>
+                    <p className="text-sm text-red-600 dark:text-red-300">
+                      {rejectedPayslip.employeeName}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowRejectedModal(false)
+                    setRejectedPayslip(null)
+                  }}
+                >
+                  ✕
+                </Button>
+              </div>
+            </div>
+
+            {/* Motivo da Rejeição */}
+            <div className="p-4 bg-red-50 dark:bg-red-950/20 border-b border-red-200 dark:border-red-900">
+              <h3 className="text-sm font-medium text-red-700 dark:text-red-400 mb-2 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Motivo da Rejeição:
+              </h3>
+              <p className="text-red-800 dark:text-red-200 bg-white dark:bg-red-950/50 p-3 rounded border border-red-200 dark:border-red-800">
+                {rejectedPayslip.rejectionReason || 'Motivo não informado'}
+              </p>
+              {rejectedPayslip.rejectedAt && (
+                <p className="text-xs text-red-500 mt-2">
+                  Rejeitado em: {new Date(rejectedPayslip.rejectedAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+            </div>
+
+            {/* Conteúdo do Holerite */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
+                {/* Resumo */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Salário Base</p>
+                    <p className="text-lg font-semibold">{formatCurrency(rejectedPayslip.baseSalary)}</p>
+                  </div>
+                  <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                    <p className="text-xs text-green-600">Total Proventos</p>
+                    <p className="text-lg font-semibold text-green-600">{formatCurrency(rejectedPayslip.totalEarnings)}</p>
+                  </div>
+                  <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                    <p className="text-xs text-red-600">Total Descontos</p>
+                    <p className="text-lg font-semibold text-red-600">{formatCurrency(rejectedPayslip.totalDeductions)}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                    <p className="text-xs text-blue-600">Líquido</p>
+                    <p className="text-lg font-semibold text-blue-600">{formatCurrency(rejectedPayslip.netSalary)}</p>
+                  </div>
+                </div>
+
+                {/* Detalhes */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Proventos */}
+                  <div className="border border-border rounded-lg p-4">
+                    <h4 className="font-medium text-green-600 mb-3">Proventos</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Salário Base</span>
+                        <span>{formatCurrency(rejectedPayslip.baseSalary)}</span>
+                      </div>
+                      {(rejectedPayslip.overtimeValue || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span>Horas Extras</span>
+                          <span>{formatCurrency(rejectedPayslip.overtimeValue || 0)}</span>
+                        </div>
+                      )}
+                      {(rejectedPayslip.bonusValue || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span>Bônus/Gratificações</span>
+                          <span>{formatCurrency(rejectedPayslip.bonusValue || 0)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Descontos */}
+                  <div className="border border-border rounded-lg p-4">
+                    <h4 className="font-medium text-red-600 mb-3">Descontos</h4>
+                    <div className="space-y-2 text-sm">
+                      {rejectedPayslip.inssValue > 0 && (
+                        <div className="flex justify-between">
+                          <span>INSS ({rejectedPayslip.inssRate}%)</span>
+                          <span>{formatCurrency(rejectedPayslip.inssValue)}</span>
+                        </div>
+                      )}
+                      {rejectedPayslip.irValue > 0 && (
+                        <div className="flex justify-between">
+                          <span>IR ({rejectedPayslip.irRate}%)</span>
+                          <span>{formatCurrency(rejectedPayslip.irValue)}</span>
+                        </div>
+                      )}
+                      {rejectedPayslip.transportVoucher > 0 && (
+                        <div className="flex justify-between">
+                          <span>Vale-Transporte</span>
+                          <span>{formatCurrency(rejectedPayslip.transportVoucher)}</span>
+                        </div>
+                      )}
+                      {rejectedPayslip.mealVoucher > 0 && (
+                        <div className="flex justify-between">
+                          <span>Vale-Refeição</span>
+                          <span>{formatCurrency(rejectedPayslip.mealVoucher)}</span>
+                        </div>
+                      )}
+                      {rejectedPayslip.healthInsurance > 0 && (
+                        <div className="flex justify-between">
+                          <span>Plano de Saúde</span>
+                          <span>{formatCurrency(rejectedPayslip.healthInsurance)}</span>
+                        </div>
+                      )}
+                      {rejectedPayslip.dentalInsurance > 0 && (
+                        <div className="flex justify-between">
+                          <span>Plano Odontológico</span>
+                          <span>{formatCurrency(rejectedPayslip.dentalInsurance)}</span>
+                        </div>
+                      )}
+                      {rejectedPayslip.absenceValue > 0 && (
+                        <div className="flex justify-between">
+                          <span>Faltas ({rejectedPayslip.absenceDays} dias)</span>
+                          <span>{formatCurrency(rejectedPayslip.absenceValue)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer com ações */}
+            <div className="p-4 border-t border-border bg-muted/30 flex justify-between items-center">
+              <p className="text-sm text-muted-foreground">
+                Após corrigir o holerite, você pode reaprová-lo para enviar novamente ao funcionário.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowRejectedModal(false)
+                    setRejectedPayslip(null)
+                  }}
+                >
+                  Fechar
+                </Button>
+                <Can permission={PERMISSIONS.PAYROLL_APPROVE}>
+                  <Button
+                    onClick={handleReapprove}
+                    disabled={isReapproving}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {isReapproving ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Reaprovar Holerite
+                  </Button>
+                </Can>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      </PageContainer>
     </ProtectedPage>
   )
 }
@@ -604,12 +1210,45 @@ function SummaryCard({ title, value, icon, color, description }: {
 }
 
 // Modal de Holerite Detalhado
-function PayslipModal({ payslip, month, year, onClose }: {
+function PayslipModal({ payslip, month, year, onClose, onAccept, onReject, isEmployee = false }: {
   payslip: Payslip
   month: number
   year: number
   onClose: () => void
+  onAccept?: () => void
+  onReject?: (reason: string) => void
+  isEmployee?: boolean
 }) {
+  const [showRejectForm, setShowRejectForm] = React.useState(false)
+  const [rejectReason, setRejectReason] = React.useState('')
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
+
+  const handleReject = async () => {
+    if (!rejectReason.trim()) {
+      toast.error('Informe o motivo da rejeição')
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      if (onReject) {
+        await onReject(rejectReason)
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleAccept = async () => {
+    setIsSubmitting(true)
+    try {
+      if (onAccept) {
+        await onAccept()
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       {/* Container com barra de rolagem fina e quase transparente */}
@@ -903,15 +1542,96 @@ function PayslipModal({ payslip, month, year, onClose }: {
           </div>
         </div>
 
+        {/* Formulário de rejeição (se ativo) */}
+        {showRejectForm && (
+          <div className="p-6 border-t border-border bg-red-50 dark:bg-red-950/20">
+            <h4 className="font-medium text-red-700 dark:text-red-400 mb-3 flex items-center gap-2">
+              <ThumbsDown className="h-4 w-4" />
+              Informe o motivo da rejeição:
+            </h4>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Descreva o que está incorreto no holerite..."
+              className="w-full p-3 border border-red-300 dark:border-red-700 rounded-lg bg-white dark:bg-red-950/30 text-sm min-h-[100px] focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+            <div className="flex justify-end gap-2 mt-3">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setShowRejectForm(false)
+                  setRejectReason('')
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                size="sm"
+                onClick={handleReject}
+                disabled={isSubmitting || !rejectReason.trim()}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isSubmitting ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <ThumbsDown className="h-4 w-4 mr-2" />
+                )}
+                Confirmar Rejeição
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Ações */}
-        <div className="p-6 border-t border-border flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
-            Fechar
-          </Button>
-          <Button>
-            <Download className="h-4 w-4 mr-2" />
-            Baixar PDF
-          </Button>
+        <div className="p-6 border-t border-border flex justify-between items-center">
+          <div>
+            {/* Mostrar status atual */}
+            {payslip.status === 'APPROVED' && isEmployee && (
+              <p className="text-sm text-muted-foreground">
+                Revise os valores e confirme se está tudo correto.
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onClose}>
+              Fechar
+            </Button>
+            
+            {/* Botões de aceitar/rejeitar (só para funcionário com status APPROVED) */}
+            {isEmployee && payslip.status === 'APPROVED' && !showRejectForm && (
+              <>
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowRejectForm(true)}
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  <ThumbsDown className="h-4 w-4 mr-2" />
+                  Rejeitar
+                </Button>
+                <Button 
+                  onClick={handleAccept}
+                  disabled={isSubmitting}
+                  className="bg-teal-600 hover:bg-teal-700"
+                >
+                  {isSubmitting ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <ThumbsUp className="h-4 w-4 mr-2" />
+                  )}
+                  Aceitar Holerite
+                </Button>
+              </>
+            )}
+            
+            {/* Botão de download (sempre visível) */}
+            {!showRejectForm && (
+              <Button>
+                <Download className="h-4 w-4 mr-2" />
+                Baixar PDF
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

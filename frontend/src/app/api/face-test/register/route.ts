@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 
 // Usar URL interna do Docker (servidor) ou fallback para localhost
-const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://backend:4000'
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000'
 
 // PROXY: Redireciona para o backend real
 export async function POST(request: NextRequest) {

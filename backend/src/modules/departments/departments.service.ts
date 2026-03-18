@@ -14,6 +14,9 @@ export class DepartmentsService {
         id: true,
         name: true,
         companyId: true,
+        _count: {
+          select: { employees: true }
+        }
       },
     })
     return items
@@ -27,5 +30,31 @@ export class DepartmentsService {
       },
     })
     return created
+  }
+
+  // Atualizar departamento
+  async update(id: string, data: { name: string }) {
+    const updated = await this.prisma.department.update({
+      where: { id },
+      data: { name: data.name },
+    })
+    return updated
+  }
+
+  // Deletar departamento
+  async delete(id: string) {
+    // Verificar se há funcionários usando este departamento
+    const employeesCount = await this.prisma.employee.count({
+      where: { departmentId: id },
+    })
+    
+    if (employeesCount > 0) {
+      throw new Error(`Não é possível excluir: ${employeesCount} funcionário(s) estão usando este departamento`)
+    }
+    
+    await this.prisma.department.delete({
+      where: { id },
+    })
+    return { success: true }
   }
 }

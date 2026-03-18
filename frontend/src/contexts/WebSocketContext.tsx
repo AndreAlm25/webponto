@@ -24,6 +24,21 @@ interface DashboardConfig {
   dashboardRecentEntriesLimit: number
 }
 
+interface Payslip {
+  id: string
+  employeeId: string
+  status: string
+  [key: string]: any
+}
+
+interface VacationRequest {
+  id: string
+  employeeId: string
+  companyId: string
+  status: string
+  [key: string]: any
+}
+
 interface WebSocketContextType {
   socket: Socket | null
   connected: boolean
@@ -38,6 +53,14 @@ interface WebSocketContextType {
   onFaceDeleted: (callback: (data: { employeeId: string }) => void) => () => void
   onDashboardConfigUpdated: (callback: (config: DashboardConfig) => void) => () => void
   onPermissionsUpdated: (callback: (data: { userId: string, role: string }) => void) => () => void
+  // Eventos de holerite
+  onPayslipAccepted: (callback: (payslip: Payslip) => void) => () => void
+  onPayslipRejected: (callback: (payslip: Payslip) => void) => () => void
+  onPayslipPaid: (callback: (payslip: Payslip) => void) => () => void
+  onPayslipsApproved: (callback: (data: { payrollId: string; count: number }) => void) => () => void
+  // Eventos de férias
+  onVacationRequestCreated: (callback: (request: VacationRequest) => void) => () => void
+  onVacationRequestUpdated: (callback: (request: VacationRequest) => void) => () => void
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null)
@@ -63,13 +86,17 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Obter URL do backend e token JWT
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+    // Derivar URL do backend a partir da variável de ambiente ou do proxy do Next.js
+    // Em desenvolvimento local: conecta em localhost:4000
+    // Via tunnel ou produção: conecta no mesmo host mas porta 4000
     const token = localStorage.getItem('token')
-    
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL ||
+      (typeof window !== 'undefined'
+        ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:4000`
+        : 'ws://localhost:4000')
 
     // Criar conexão WebSocket com autenticação
-    const newSocket = io(backendUrl, {
+    const newSocket = io(wsUrl, {
       transports: ['polling', 'websocket'], // Polling primeiro para evitar falhas
       reconnection: true,
       reconnectionDelay: 1000,
@@ -207,6 +234,50 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     [registerListener]
   )
 
+  // Eventos de holerite
+  const onPayslipAccepted = useCallback(
+    (callback: (payslip: Payslip) => void) => {
+      return registerListener('payslip-accepted', callback)
+    },
+    [registerListener]
+  )
+
+  const onPayslipRejected = useCallback(
+    (callback: (payslip: Payslip) => void) => {
+      return registerListener('payslip-rejected', callback)
+    },
+    [registerListener]
+  )
+
+  const onPayslipPaid = useCallback(
+    (callback: (payslip: Payslip) => void) => {
+      return registerListener('payslip-paid', callback)
+    },
+    [registerListener]
+  )
+
+  const onPayslipsApproved = useCallback(
+    (callback: (data: { payrollId: string; count: number }) => void) => {
+      return registerListener('payslips-approved', callback)
+    },
+    [registerListener]
+  )
+
+  // Eventos de férias
+  const onVacationRequestCreated = useCallback(
+    (callback: (request: VacationRequest) => void) => {
+      return registerListener('vacation-request-created', callback)
+    },
+    [registerListener]
+  )
+
+  const onVacationRequestUpdated = useCallback(
+    (callback: (request: VacationRequest) => void) => {
+      return registerListener('vacation-request-updated', callback)
+    },
+    [registerListener]
+  )
+
   const value: WebSocketContextType = {
     socket,
     connected,
@@ -220,6 +291,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     onFaceDeleted,
     onDashboardConfigUpdated,
     onPermissionsUpdated,
+    onPayslipAccepted,
+    onPayslipRejected,
+    onPayslipPaid,
+    onPayslipsApproved,
+    onVacationRequestCreated,
+    onVacationRequestUpdated,
   }
 
   return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>

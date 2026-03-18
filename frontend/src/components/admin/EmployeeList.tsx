@@ -9,7 +9,7 @@ import EditEmployeeModal from './EditEmployeeModal'
 import EmployeeActionsMenu from './EmployeeActionsMenu'
 import AvatarCircle from '@/components/facial/AvatarCircle'
 import FacialRecognitionFlow from '@/components/facial/FacialRecognitionFlow'
-import { Camera, MapPin, Timer } from 'lucide-react'
+import { Camera, MapPin } from 'lucide-react'
 
 export type Employee = {
   id: string
@@ -22,8 +22,6 @@ export type Employee = {
   allowFacialRecognition?: boolean
   faceRegistered?: boolean
   requireLiveness?: boolean
-  requireGeolocation?: boolean
-  minGeoAccuracyMeters?: number | null
 }
 
 interface EmployeeListProps {
@@ -257,9 +255,6 @@ export default function EmployeeList({ searchTerm = '', onEmployeeAdded, onEditE
                   <span className="flex items-center gap-1">
                     {emp.allowRemoteClockIn && (
                       <MapPin className="h-4 w-4 text-green-600 flex-shrink-0" />
-                    )}
-                    {emp.requireGeolocation && (
-                      <Timer className="h-4 w-4 text-green-600 flex-shrink-0" />
                     )}
                     {emp.allowFacialRecognition && (
                       <Camera className="h-4 w-4 text-green-600 flex-shrink-0" />

@@ -1,15 +1,17 @@
 /**
  * 03 - Time Entries Seed
- * Gera batidas de ponto para o mês atual e anterior
- * com diferentes cenários de teste
+ * Gera batidas de ponto para os últimos 4 meses
+ * com diferentes cenários de teste para validar cálculos
  * 
  * CENÁRIOS GERADOS:
  * - Mês completo sem faltas
- * - Mês com faltas
+ * - Mês com faltas (algumas justificadas por atestado)
  * - Mês com atrasos
- * - Mês com horas extras
+ * - Mês com horas extras (50% e 100%)
  * - Mês com adicional noturno
  * - Batidas com reconhecimento facial (sucesso e falha)
+ * 
+ * IMPORTANTE: Gera 4 meses de dados para simular empresa em uso
  */
 
 import { PrismaClient } from '@prisma/client'
@@ -26,6 +28,10 @@ type TimeEntryScenario =
 
 // Cenários por funcionário (identificado pelo email)
 const EMPLOYEE_SCENARIOS: Record<string, EmployeeScenarioConfig> = {
+  // ==========================================
+  // ACME TECH - Empresa com desconto de atrasos
+  // ==========================================
+  
   // Paulo Santos - Mês completo com horas extras
   'paulo.santos@acmetech.com.br': {
     scenario: 'with-overtime',
@@ -36,7 +42,7 @@ const EMPLOYEE_SCENARIOS: Record<string, EmployeeScenarioConfig> = {
     nightShiftHours: 0,
     facialRecognition: {
       enabled: true,
-      successRate: 0.95,  // 95% de sucesso
+      successRate: 0.95,
       avgSimilarity: 0.92,
     },
   },
@@ -52,7 +58,7 @@ const EMPLOYEE_SCENARIOS: Record<string, EmployeeScenarioConfig> = {
     nightShiftHours: 0,
     facialRecognition: {
       enabled: true,
-      successRate: 0.85,  // 85% de sucesso (algumas falhas)
+      successRate: 0.85,
       avgSimilarity: 0.78,
     },
   },
@@ -67,12 +73,12 @@ const EMPLOYEE_SCENARIOS: Record<string, EmployeeScenarioConfig> = {
     nightShiftHours: 20,
     facialRecognition: {
       enabled: true,
-      successRate: 1.0,  // 100% sucesso
+      successRate: 1.0,
       avgSimilarity: 0.95,
     },
   },
 
-  // Carlos Pereira - Só metade do mês (entrou recentemente ou saiu)
+  // Carlos Pereira - Só metade do mês
   'carlos.pereira@acmetech.com.br': {
     scenario: 'half-month',
     absences: 0,
@@ -82,7 +88,7 @@ const EMPLOYEE_SCENARIOS: Record<string, EmployeeScenarioConfig> = {
     overtimeHours100: 0,
     nightShiftHours: 0,
     facialRecognition: {
-      enabled: false,  // Não usa reconhecimento facial
+      enabled: false,
     },
   },
 
@@ -97,6 +103,57 @@ const EMPLOYEE_SCENARIOS: Record<string, EmployeeScenarioConfig> = {
     facialRecognition: {
       enabled: true,
       successRate: 0.90,
+      avgSimilarity: 0.88,
+    },
+  },
+
+  // ==========================================
+  // BETA SOLUTIONS - Empresa SEM desconto de atrasos
+  // ==========================================
+  
+  // Lucas Ferreira - Mês completo com alguns atrasos (NÃO serão descontados)
+  'lucas.ferreira@betasolutions.com.br': {
+    scenario: 'with-late',
+    absences: 0,
+    lateCount: 5,
+    lateMinutesAvg: 20,
+    overtimeHours50: 0,
+    overtimeHours100: 0,
+    nightShiftHours: 0,
+    facialRecognition: {
+      enabled: true,
+      successRate: 0.90,
+      avgSimilarity: 0.85,
+    },
+  },
+
+  // Juliana Costa - Mês completo perfeito
+  'juliana.costa@betasolutions.com.br': {
+    scenario: 'full-month',
+    absences: 0,
+    lateCount: 0,
+    overtimeHours50: 0,
+    overtimeHours100: 0,
+    nightShiftHours: 0,
+    facialRecognition: {
+      enabled: true,
+      successRate: 0.95,
+      avgSimilarity: 0.90,
+    },
+  },
+
+  // Roberto Almeida - Com horas extras
+  'roberto.almeida@betasolutions.com.br': {
+    scenario: 'with-overtime',
+    absences: 0,
+    lateCount: 2,
+    lateMinutesAvg: 10,
+    overtimeHours50: 10,
+    overtimeHours100: 5,
+    nightShiftHours: 0,
+    facialRecognition: {
+      enabled: true,
+      successRate: 0.92,
       avgSimilarity: 0.88,
     },
   },
@@ -145,15 +202,23 @@ export async function seedTimeEntries(prisma: PrismaClient): Promise<void> {
     },
   })
 
-  console.log(`  → Gerando batidas para ${employees.length} funcionários`)
+  console.log(`  → Gerando batidas para ${employees.length} funcionários (4 meses)`)
 
   const currentDate = new Date()
   const currentMonth = currentDate.getMonth()
   const currentYear = currentDate.getFullYear()
 
-  // Mês anterior
-  const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1
-  const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear
+  // Calcular os 4 meses (mês atual + 3 anteriores)
+  const months: Array<{ month: number; year: number }> = []
+  for (let i = 3; i >= 0; i--) {
+    let m = currentMonth - i
+    let y = currentYear
+    if (m < 0) {
+      m += 12
+      y -= 1
+    }
+    months.push({ month: m, year: y })
+  }
 
   let totalEntries = 0
 
@@ -161,35 +226,32 @@ export async function seedTimeEntries(prisma: PrismaClient): Promise<void> {
     if (!employee.user) continue
 
     const config = EMPLOYEE_SCENARIOS[employee.user.email] || getDefaultScenario()
+    let employeeEntries = 0
 
-    // Gerar batidas do mês anterior
-    const prevEntries = await generateMonthEntries(
-      prisma,
-      employee,
-      prevYear,
-      prevMonth,
-      config,
-    )
-    totalEntries += prevEntries
+    // Gerar batidas para cada um dos 4 meses
+    for (let i = 0; i < months.length; i++) {
+      const { month, year } = months[i]
+      const isCurrentMonth = i === months.length - 1
 
-    // Gerar batidas do mês atual (até hoje)
-    const currentEntries = await generateMonthEntries(
-      prisma,
-      employee,
-      currentYear,
-      currentMonth,
-      config,
-      true, // Só até hoje
-    )
-    totalEntries += currentEntries
+      const entries = await generateMonthEntries(
+        prisma,
+        employee,
+        year,
+        month,
+        config,
+        isCurrentMonth, // Só até hoje se for mês atual
+      )
+      employeeEntries += entries
+      totalEntries += entries
+    }
 
     // Log de desenvolvimento
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`    ✓ ${employee.user.name}: ${prevEntries + currentEntries} batidas (${config.scenario})`)
+      console.log(`    ✓ ${employee.user.name}: ${employeeEntries} batidas (${config.scenario})`)
     }
   }
 
-  console.log(`  → Total: ${totalEntries} batidas geradas`)
+  console.log(`  → Total: ${totalEntries} batidas geradas em 4 meses`)
 }
 
 function getDefaultScenario(): EmployeeScenarioConfig {
@@ -228,23 +290,26 @@ async function generateMonthEntries(
     ? workDays.slice(0, Math.floor(workDays.length / 2))
     : workDays
 
-  // Dias de falta (aleatórios)
-  const absenceDays = selectRandomDays(daysToProcess, config.absences)
+  // Dias de falta (FIXOS - dias 3, 8, 15, 22 do mês)
+  const absenceDays = selectFixedDays(daysToProcess, config.absences, [3, 8, 15, 22])
   
-  // Dias de atraso (aleatórios, excluindo faltas)
-  const lateDays = selectRandomDays(
+  // Dias de atraso (FIXOS - dias 5, 12, 19, 26 do mês, excluindo faltas)
+  const lateDays = selectFixedDays(
     daysToProcess.filter(d => !absenceDays.includes(d)),
     config.lateCount,
+    [5, 12, 19, 26, 7],
   )
 
-  // Dias com hora extra (distribuídos)
-  const overtimeDays50 = selectRandomDays(
+  // Dias com hora extra (FIXOS - dias 6, 13, 20, 27)
+  const overtimeDays50 = selectFixedDays(
     daysToProcess.filter(d => !absenceDays.includes(d)),
     Math.ceil(config.overtimeHours50 / 2), // ~2h por dia
+    [6, 13, 20, 27],
   )
-  const overtimeDays100 = selectRandomDays(
+  const overtimeDays100 = selectFixedDays(
     daysToProcess.filter(d => !absenceDays.includes(d) && !overtimeDays50.includes(d)),
     Math.ceil(config.overtimeHours100 / 4), // ~4h por dia (fim de semana)
+    [4, 11, 18, 25],
   )
 
   const entries: TimeEntryData[] = []
@@ -258,10 +323,12 @@ async function generateMonthEntries(
     const isLateDay = lateDays.includes(day)
     const isOvertime50Day = overtimeDays50.includes(day)
     const isOvertime100Day = overtimeDays100.includes(day)
-    const isNightShiftDay = config.nightShiftHours > 0 && Math.random() < 0.3
+    // Dias de adicional noturno (FIXOS - dias 2, 9, 16, 23)
+    const nightShiftFixedDays = [2, 9, 16, 23]
+    const isNightShiftDay = config.nightShiftHours > 0 && nightShiftFixedDays.includes(day.getDate())
 
-    // Determinar método de batida
-    const useFacial = config.facialRecognition.enabled && Math.random() < 0.8
+    // Determinar método de batida (FIXO - facial nos dias pares, manual nos ímpares)
+    const useFacial = config.facialRecognition.enabled && day.getDate() % 2 === 0
     const method = useFacial ? 'FACIAL_RECOGNITION' : 'MANUAL'
 
     // Simular resultado do reconhecimento facial
@@ -272,33 +339,22 @@ async function generateMonthEntries(
     let status: 'VALID' | 'PENDING' | 'INVALID' = 'VALID'
 
     if (useFacial) {
-      const successRate = config.facialRecognition.successRate || 0.95
-      recognitionValid = Math.random() < successRate
+      // FIXO - falha de reconhecimento apenas no dia 10 de cada mês
+      recognitionValid = day.getDate() !== 10
 
       if (!recognitionValid) {
-        // Simular falha de reconhecimento
-        similarity = 0.4 + Math.random() * 0.3 // 0.4 a 0.7 (baixa)
+        similarity = 0.55 // Valor fixo para falha
         status = 'INVALID'
-        
-        // Log de desenvolvimento para falhas
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`      ⚠ [DEV] Falha facial simulada: ${employee.user.name} em ${day.toLocaleDateString()} (similarity: ${similarity.toFixed(2)})`)
-        }
       } else {
-        // Variação normal na similaridade
-        similarity = (config.facialRecognition.avgSimilarity || 0.90) + (Math.random() * 0.1 - 0.05)
-        similarity = Math.min(0.99, Math.max(0.75, similarity))
+        // Similaridade fixa baseada na config
+        similarity = config.facialRecognition.avgSimilarity || 0.90
       }
 
-      // Simular falha de liveness ocasional
-      if (Math.random() < 0.02) { // 2% de chance
+      // FIXO - falha de liveness apenas no dia 20 de cada mês
+      if (day.getDate() === 20) {
         livenessValid = false
-        livenessScore = 0.3 + Math.random() * 0.3
+        livenessScore = 0.45
         status = 'PENDING'
-        
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`      ⚠ [DEV] Falha liveness simulada: ${employee.user.name} em ${day.toLocaleDateString()}`)
-        }
       }
     }
 
@@ -308,20 +364,19 @@ async function generateMonthEntries(
     let clockOutHour = 18
     let clockOutMinute = 0
 
-    // Aplicar atraso
+    // Aplicar atraso (FIXO - sempre o valor configurado, sem variação)
     if (isLateDay) {
-      const lateMinutes = config.lateMinutesAvg || 30
-      clockInMinute = lateMinutes + Math.floor(Math.random() * 15)
+      clockInMinute = config.lateMinutesAvg || 30
     }
 
-    // Aplicar hora extra
+    // Aplicar hora extra (FIXO - sem variação de minutos)
     if (isOvertime50Day) {
       clockOutHour = 20
-      clockOutMinute = Math.floor(Math.random() * 30)
+      clockOutMinute = 0
     }
     if (isOvertime100Day) {
       clockOutHour = 22
-      clockOutMinute = Math.floor(Math.random() * 30)
+      clockOutMinute = 0
     }
 
     // Horário noturno
@@ -331,9 +386,9 @@ async function generateMonthEntries(
       // Ajustar para o dia seguinte
     }
 
-    // Criar entrada (CLOCK_IN)
+    // Criar entrada (CLOCK_IN) - segundos fixos em 0
     const clockIn = new Date(day)
-    clockIn.setHours(clockInHour, clockInMinute, Math.floor(Math.random() * 60))
+    clockIn.setHours(clockInHour, clockInMinute, 0)
 
     entries.push({
       employeeId: employee.id,
@@ -350,13 +405,13 @@ async function generateMonthEntries(
       lateMinutes: isLateDay ? clockInMinute : undefined,
     })
 
-    // Criar intervalo (BREAK_START e BREAK_END)
+    // Criar intervalo (BREAK_START e BREAK_END) - horários fixos
     if (!isNightShiftDay) {
       const breakStart = new Date(day)
-      breakStart.setHours(12, Math.floor(Math.random() * 10), 0)
+      breakStart.setHours(12, 0, 0)
       
       const breakEnd = new Date(day)
-      breakEnd.setHours(13, Math.floor(Math.random() * 10), 0)
+      breakEnd.setHours(13, 0, 0)
 
       entries.push({
         employeeId: employee.id,
@@ -382,7 +437,7 @@ async function generateMonthEntries(
     if (isNightShiftDay) {
       clockOut.setDate(clockOut.getDate() + 1)
     }
-    clockOut.setHours(clockOutHour, clockOutMinute, Math.floor(Math.random() * 60))
+    clockOut.setHours(clockOutHour, clockOutMinute, 0)
 
     const overtimeMinutes = isOvertime50Day || isOvertime100Day
       ? (clockOutHour - 18) * 60 + clockOutMinute
@@ -437,9 +492,28 @@ function getWorkDays(year: number, month: number, onlyUntilToday: boolean): Date
   return days
 }
 
-function selectRandomDays(days: Date[], count: number): Date[] {
+// Seleciona dias FIXOS baseado nos dias do mês especificados
+function selectFixedDays(days: Date[], count: number, preferredDays: number[]): Date[] {
+  if (count <= 0) return []
   if (count >= days.length) return [...days]
   
-  const shuffled = [...days].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, count)
+  // Selecionar dias que correspondem aos dias preferidos do mês
+  const selected: Date[] = []
+  for (const preferredDay of preferredDays) {
+    if (selected.length >= count) break
+    const found = days.find(d => d.getDate() === preferredDay)
+    if (found && !selected.includes(found)) {
+      selected.push(found)
+    }
+  }
+  
+  // Se não conseguiu preencher, pega os primeiros dias disponíveis
+  for (const day of days) {
+    if (selected.length >= count) break
+    if (!selected.includes(day)) {
+      selected.push(day)
+    }
+  }
+  
+  return selected
 }

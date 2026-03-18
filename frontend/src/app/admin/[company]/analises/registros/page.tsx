@@ -1,13 +1,16 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Clock, ClockArrowUp, ClockArrowDown, UserRound, Calendar, Filter, TrendingUp } from 'lucide-react'
+import { Clock, ClockArrowUp, ClockArrowDown, UserRound, Calendar, Filter, TrendingUp, FileSpreadsheet, Download } from 'lucide-react'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import Image from 'next/image'
 import { useWebSocket } from '@/contexts/WebSocketContext'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { PERMISSIONS } from '@/hooks/usePermissions'
+import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
+import { exportarRegistrosExcel } from '@/lib/excel-export'
 
 // Helper para construir URL completa do avatar
 const getAvatarUrl = (avatarUrl: string | null | undefined): string | null => {
@@ -44,7 +47,22 @@ const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString())
     clockOut: 0,
     breaks: 0,
   })
+  const [exporting, setExporting] = useState(false)
   const { onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted } = useWebSocket()
+
+  // Função para exportar Excel (processamento no navegador)
+  const handleExportExcel = async () => {
+    if (entries.length === 0) return
+    
+    setExporting(true)
+    try {
+      await exportarRegistrosExcel(entries, `registros-ponto-${selectedDate || 'todos'}.xlsx`)
+    } catch (error) {
+      console.error('Erro ao exportar Excel:', error)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // Validar slug
   if (slugMismatch) {
@@ -248,22 +266,25 @@ const entryDate = `${entryDateObj.getFullYear()}-${String(entryDateObj.getMonth(
     }
   }
 
+  const base = company ? `/admin/${encodeURIComponent(company)}` : '/admin'
+
   return (
     <ProtectedPage permission={PERMISSIONS.TIME_ENTRIES_VIEW}>
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10 text-primary">
-          <UserRound className="h-6 w-6" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Registros de Pontos</h1>
-          <p className="text-muted-foreground">Dashboard completo de registros</p>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Registros de Ponto"
+        description="Dashboard completo de registros"
+        icon={<Clock className="h-6 w-6" />}
+        breadcrumbs={[
+          { label: 'Admin', href: base },
+          { label: 'Análises' },
+          { label: 'Registros de Ponto' }
+        ]}
+      />
 
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="mt-6 space-y-6">
+        {/* Cards de Estatísticas */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total de Registros"
           value={stats.totalToday}
@@ -288,10 +309,10 @@ const entryDate = `${entryDateObj.getFullYear()}-${String(entryDateObj.getMonth(
           icon={<Clock className="h-5 w-5" />}
           color="yellow"
         />
-      </div>
+        </div>
 
-      {/* Filtros */}
-      <div className="border border-border rounded-lg bg-card p-4">
+        {/* Filtros */}
+        <div className="border border-border rounded-lg bg-card p-4">
         <div className="flex items-center gap-2 mb-4">
           <Filter className="h-5 w-5" />
           <h3 className="font-semibold">Filtros</h3>
@@ -328,14 +349,31 @@ const entryDate = `${entryDateObj.getFullYear()}-${String(entryDateObj.getMonth(
             </select>
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* Lista de registros */}
-      <div className="border border-border rounded-lg bg-card">
-        <div className="p-4 border-b border-border">
+        {/* Lista de registros */}
+        <div className="border border-border rounded-lg bg-card">
+        <div className="p-4 border-b border-border flex items-center justify-between">
           <h3 className="font-semibold">
             {loading ? 'Carregando...' : `${entries.length} registros encontrados`}
           </h3>
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting || entries.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            {exporting ? (
+              <>
+                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Exportando...
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-4 w-4" />
+                Exportar Excel
+              </>
+            )}
+          </button>
         </div>
         <div className="divide-y divide-border">
           {loading ? (
@@ -410,8 +448,9 @@ const entryDate = `${entryDateObj.getFullYear()}-${String(entryDateObj.getMonth(
             )})
           )}
         </div>
+        </div>
       </div>
-    </div>
+    </PageContainer>
     </ProtectedPage>
   )
 }

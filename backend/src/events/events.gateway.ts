@@ -214,4 +214,68 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     }
   }
+
+  // ==========================================
+  // EVENTOS DE HOLERITE/FOLHA DE PAGAMENTO
+  // ==========================================
+
+  /**
+   * Emitir evento de holerite aceito pelo funcionário
+   */
+  emitPayslipAccepted(companyId: string, payslip: any) {
+    this.logger.log(`📤 Emitindo payslip-accepted para empresa ${companyId}`);
+    this.server.to(`company:${companyId}`).emit('payslip-accepted', payslip);
+  }
+
+  /**
+   * Emitir evento de holerite rejeitado pelo funcionário
+   */
+  emitPayslipRejected(companyId: string, payslip: any) {
+    this.logger.log(`📤 Emitindo payslip-rejected para empresa ${companyId}`);
+    this.server.to(`company:${companyId}`).emit('payslip-rejected', payslip);
+  }
+
+  /**
+   * Emitir evento de holerite pago
+   */
+  emitPayslipPaid(companyId: string, payslip: any) {
+    this.logger.log(`📤 Emitindo payslip-paid para empresa ${companyId}`);
+    this.server.to(`company:${companyId}`).emit('payslip-paid', payslip);
+  }
+
+  /**
+   * Emitir evento de folha de pagamento atualizada
+   */
+  emitPayrollUpdated(companyId: string, payroll: any) {
+    this.logger.log(`📤 Emitindo payroll-updated para empresa ${companyId}`);
+    this.server.to(`company:${companyId}`).emit('payroll-updated', payroll);
+  }
+
+  /**
+   * Emitir evento de holerites aprovados (admin aprovou a folha)
+   */
+  emitPayslipsApproved(companyId: string, data: { payrollId: string; count: number }) {
+    this.logger.log(`📤 Emitindo payslips-approved para empresa ${companyId}`);
+    this.server.to(`company:${companyId}`).emit('payslips-approved', data);
+  }
+
+  // ==========================================
+  // EVENTOS DE FÉRIAS
+  // ==========================================
+
+  /**
+   * Emitir evento de solicitação de férias criada (funcionário solicitou)
+   */
+  emitVacationRequestCreated(companyId: string, request: any) {
+    this.logger.log(`📤 Emitindo vacation-request-created para empresa ${companyId}`);
+    this.server.to(`company:${companyId}`).emit('vacation-request-created', request);
+  }
+
+  /**
+   * Emitir evento de solicitação de férias atualizada (aprovada, rejeitada, contraproposta, etc)
+   */
+  emitVacationRequestUpdated(companyId: string, request: any) {
+    this.logger.log(`📤 Emitindo vacation-request-updated para empresa ${companyId}`);
+    this.server.to(`company:${companyId}`).emit('vacation-request-updated', request);
+  }
 }

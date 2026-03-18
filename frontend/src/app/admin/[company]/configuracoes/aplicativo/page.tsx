@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { Settings, Save, Clock, Monitor } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
@@ -100,18 +101,19 @@ export default function AppSettingsPage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
-      <PageHeader
-        icon={<Settings className="h-6 w-6" />}
-        title="Configurações do Aplicativo"
-        description="Configure o comportamento do sistema de ponto"
-        breadcrumbs={[
-          { label: 'Admin', href: base },
-          { label: 'Config. da Empresa' },
-          { label: 'Aplicativo' },
-        ]}
-      />
+      <PageContainer>
+        <PageHeader
+          icon={<Settings className="h-6 w-6" />}
+          title="Configurações do Aplicativo"
+          description="Configure o comportamento do sistema de ponto"
+          breadcrumbs={[
+            { label: 'Admin', href: base },
+            { label: 'Configurações' },
+            { label: 'Aplicativo' },
+          ]}
+        />
 
-      <div className="max-w-4xl space-y-6">
+        <div className="mt-6 space-y-6">
         {/* Card: Terminal de Ponto */}
         <div className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center gap-3 mb-6">
@@ -186,7 +188,8 @@ export default function AppSettingsPage() {
             {saving ? 'Salvando...' : 'Salvar Configurações'}
           </button>
         </div>
-      </div>
+        </div>
+      </PageContainer>
     </ProtectedPage>
   )
 }

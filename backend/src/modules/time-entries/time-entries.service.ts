@@ -5,7 +5,8 @@ import { MinioService } from '../../common/minio.service';
 import { EventsGateway } from '../../events/events.gateway';
 import { ComplianceService } from '../compliance/compliance.service';
 import { TimeEntryType, TimeEntryStatus, GeofenceStatus, GeofencePolicy, OvertimeStatus, OvertimeType } from '@prisma/client';
-import { startOfDay, endOfDay } from 'date-fns';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format, differenceInMinutes, isWeekend } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 @Injectable()
 export class TimeEntriesService {
@@ -1035,5 +1036,271 @@ export class TimeEntriesService {
     });
 
     return timeEntries;
+  }
+
+  /**
+   * Gerar Espelho de Ponto Mensal
+   * Retorna dados completos para o relatório mensal de um funcionário
+   * Conforme Portaria 671 do MTE
+   */
+  async gerarEspelhoPonto(
+    employeeId: string,
+    companyId: string,
+    mes: number,  // 1-12
+    ano: number,
+  ) {
+    // 1. Buscar funcionário com dados completos
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        id: employeeId,
+        companyId,
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            cpf: true,
+            email: true,
+            avatarUrl: true,
+          },
+        },
+        position: {
+          select: {
+            name: true,
+          },
+        },
+        department: {
+          select: {
+            name: true,
+          },
+        },
+        company: {
+          select: {
+            tradeName: true,
+            legalName: true,
+            cnpj: true,
+            logoUrl: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Funcionário não encontrado.');
+    }
+
+    // 2. Definir período do mês
+    const dataReferencia = new Date(ano, mes - 1, 1);
+    const inicioMes = startOfMonth(dataReferencia);
+    const fimMes = endOfMonth(dataReferencia);
+
+    // 3. Buscar todos os registros do mês
+    const registros = await this.prisma.timeEntry.findMany({
+      where: {
+        employeeId,
+        companyId,
+        timestamp: {
+          gte: inicioMes,
+          lte: fimMes,
+        },
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    });
+
+    // 4. Agrupar registros por dia
+    const diasDoMes = eachDayOfInterval({ start: inicioMes, end: fimMes });
+    const registrosPorDia: Record<string, any[]> = {};
+
+    registros.forEach((reg) => {
+      const diaKey = format(reg.timestamp, 'yyyy-MM-dd');
+      if (!registrosPorDia[diaKey]) {
+        registrosPorDia[diaKey] = [];
+      }
+      registrosPorDia[diaKey].push(reg);
+    });
+
+    // 5. Calcular dados de cada dia
+    let totalMinutosTrabalhados = 0;
+    let totalMinutosExtras = 0;
+    let totalMinutosNoturnos = 0;
+    let diasTrabalhados = 0;
+    let faltas = 0;
+    let atrasos = 0;
+
+    const diasDetalhados = diasDoMes.map((dia) => {
+      const diaKey = format(dia, 'yyyy-MM-dd');
+      const registrosDoDia = registrosPorDia[diaKey] || [];
+      const diaSemana = format(dia, 'EEEE', { locale: ptBR });
+      const fimDeSemana = isWeekend(dia);
+
+      // Ordenar registros por timestamp
+      registrosDoDia.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+      // Extrair horários por tipo
+      const entrada = registrosDoDia.find((r) => r.type === 'CLOCK_IN');
+      const inicioIntervalo = registrosDoDia.find((r) => r.type === 'BREAK_START');
+      const fimIntervalo = registrosDoDia.find((r) => r.type === 'BREAK_END');
+      const saida = registrosDoDia.find((r) => r.type === 'CLOCK_OUT');
+
+      // Calcular horas trabalhadas no dia
+      let minutosTrabalhados = 0;
+      let minutosIntervalo = 0;
+
+      if (entrada && saida) {
+        const totalMinutosDia = differenceInMinutes(saida.timestamp, entrada.timestamp);
+        
+        // Descontar intervalo se houver
+        if (inicioIntervalo && fimIntervalo) {
+          minutosIntervalo = differenceInMinutes(fimIntervalo.timestamp, inicioIntervalo.timestamp);
+        }
+        
+        minutosTrabalhados = totalMinutosDia - minutosIntervalo;
+        if (minutosTrabalhados > 0) {
+          totalMinutosTrabalhados += minutosTrabalhados;
+          diasTrabalhados++;
+        }
+      } else if (!fimDeSemana && registrosDoDia.length === 0) {
+        // Dia útil sem registros = falta (exceto se for feriado - TODO: implementar calendário)
+        faltas++;
+      }
+
+      // Verificar atraso (entrada após horário configurado)
+      if (entrada && employee.workStartTime) {
+        const [horaEsperada, minutoEsperado] = employee.workStartTime.split(':').map(Number);
+        const horarioEsperado = new Date(dia);
+        horarioEsperado.setHours(horaEsperada, minutoEsperado, 0, 0);
+        
+        const minutosAtraso = differenceInMinutes(entrada.timestamp, horarioEsperado);
+        if (minutosAtraso > 10) { // Tolerância de 10 minutos
+          atrasos++;
+        }
+      }
+
+      // Calcular horas extras (acima de 8h diárias)
+      const minutosExtras = Math.max(0, minutosTrabalhados - 480); // 480 = 8h
+      if (minutosExtras > 0) {
+        totalMinutosExtras += minutosExtras;
+      }
+
+      // Calcular horas noturnas (22h às 5h)
+      let minutosNoturnos = 0;
+      if (entrada && saida) {
+        const horaEntrada = entrada.timestamp.getHours();
+        const horaSaida = saida.timestamp.getHours();
+        
+        // Simplificado: se entrada ou saída em horário noturno
+        if (horaEntrada >= 22 || horaEntrada < 5 || horaSaida >= 22 || horaSaida < 5) {
+          // Estimativa simplificada - para cálculo preciso seria necessário análise mais detalhada
+          minutosNoturnos = Math.min(minutosTrabalhados, 60); // Placeholder
+          totalMinutosNoturnos += minutosNoturnos;
+        }
+      }
+
+      return {
+        data: diaKey,
+        diaSemana,
+        fimDeSemana,
+        entrada: entrada ? format(entrada.timestamp, 'HH:mm') : null,
+        inicioIntervalo: inicioIntervalo ? format(inicioIntervalo.timestamp, 'HH:mm') : null,
+        fimIntervalo: fimIntervalo ? format(fimIntervalo.timestamp, 'HH:mm') : null,
+        saida: saida ? format(saida.timestamp, 'HH:mm') : null,
+        minutosTrabalhados,
+        horasTrabalhadas: this.formatarHoras(minutosTrabalhados),
+        minutosExtras,
+        horasExtras: this.formatarHoras(minutosExtras),
+        minutosNoturnos,
+        horasNoturnas: this.formatarHoras(minutosNoturnos),
+        registros: registrosDoDia.map((r) => ({
+          tipo: r.type,
+          horario: format(r.timestamp, 'HH:mm:ss'),
+          metodo: r.method,
+          status: r.status,
+        })),
+      };
+    });
+
+    // 6. Calcular totais
+    const jornadaEsperadaDiaria = 480; // 8 horas em minutos
+    const diasUteisNoMes = diasDoMes.filter((d) => !isWeekend(d)).length;
+    const jornadaEsperadaMensal = diasUteisNoMes * jornadaEsperadaDiaria;
+    const saldoMinutos = totalMinutosTrabalhados - jornadaEsperadaMensal;
+
+    // 7. Montar resposta
+    return {
+      // Dados do funcionário
+      funcionario: {
+        id: employee.id,
+        nome: employee.user?.name || 'N/A',
+        cpf: employee.user?.cpf || 'N/A',
+        matricula: employee.registrationId,
+        cargo: employee.position?.name || 'N/A',
+        departamento: employee.department?.name || 'N/A',
+        dataAdmissao: format(employee.hireDate, 'dd/MM/yyyy'),
+        jornadaDiaria: employee.workStartTime && employee.workEndTime 
+          ? `${employee.workStartTime} às ${employee.workEndTime}`
+          : '08:00 às 18:00',
+        fotoUrl: employee.user?.avatarUrl 
+          ? `/api/files/employees/${employee.user.avatarUrl}` 
+          : null,
+      },
+      
+      // Dados da empresa
+      empresa: {
+        nomeFantasia: employee.company?.tradeName || 'N/A',
+        razaoSocial: employee.company?.legalName || 'N/A',
+        cnpj: employee.company?.cnpj || 'N/A',
+        logoUrl: employee.company?.logoUrl 
+          ? `/api/files/employees/${employee.company.logoUrl}` 
+          : null,
+      },
+      
+      // Período
+      periodo: {
+        mes,
+        ano,
+        mesNome: format(dataReferencia, 'MMMM', { locale: ptBR }),
+        mesAno: format(dataReferencia, 'MMMM/yyyy', { locale: ptBR }),
+        dataInicio: format(inicioMes, 'dd/MM/yyyy'),
+        dataFim: format(fimMes, 'dd/MM/yyyy'),
+      },
+      
+      // Resumo
+      resumo: {
+        diasUteis: diasUteisNoMes,
+        diasTrabalhados,
+        faltas,
+        atrasos,
+        totalMinutosTrabalhados,
+        totalHorasTrabalhadas: this.formatarHoras(totalMinutosTrabalhados),
+        jornadaEsperadaMinutos: jornadaEsperadaMensal,
+        jornadaEsperada: this.formatarHoras(jornadaEsperadaMensal),
+        saldoMinutos,
+        saldo: this.formatarHoras(Math.abs(saldoMinutos)),
+        saldoPositivo: saldoMinutos >= 0,
+        totalMinutosExtras,
+        totalHorasExtras: this.formatarHoras(totalMinutosExtras),
+        totalMinutosNoturnos,
+        totalHorasNoturnas: this.formatarHoras(totalMinutosNoturnos),
+      },
+      
+      // Detalhamento por dia
+      dias: diasDetalhados,
+      
+      // Metadados
+      geradoEm: new Date().toISOString(),
+      versao: '1.0',
+    };
+  }
+
+  /**
+   * Formatar minutos para string HH:mm
+   */
+  private formatarHoras(minutos: number): string {
+    const horas = Math.floor(Math.abs(minutos) / 60);
+    const mins = Math.abs(minutos) % 60;
+    const sinal = minutos < 0 ? '-' : '';
+    return `${sinal}${horas.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
   }
 }

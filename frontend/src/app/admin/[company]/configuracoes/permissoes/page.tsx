@@ -13,6 +13,7 @@ import { Loader2, Shield, Users, Save, RefreshCw, TrendingUp, Settings, Bell, La
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { useParams } from 'next/navigation'
 
 // Mapeamento de ações para português
@@ -81,6 +82,7 @@ const PERMISSION_CATEGORIES: CategoryConfig[] = [
     label: 'Configurações',
     icon: Settings,
     modules: [
+      { key: 'company', label: 'Dados da Empresa', icon: Building2, description: 'Informações e horário de funcionamento da empresa' },
       { key: 'settings', label: 'Config. Gerais', icon: Settings, description: 'Configurações do sistema' },
       { key: 'permissions', label: 'Permissões', icon: Shield, description: 'Gerenciar permissões de acesso' },
       { key: 'audit', label: 'Auditoria', icon: FileSearch, description: 'Logs de atividades do sistema' },
@@ -323,17 +325,18 @@ export default function PermissoesPage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.PERMISSIONS_VIEW}>
-      <PageHeader
-        title="Permissões"
-        description="Configure as permissões de acesso para cada função"
-        icon={<Shield className="h-6 w-6" />}
-        breadcrumbs={[
-          { label: 'Admin', href: base },
-          { label: 'Configurações' },
-          { label: 'Permissões' }
-        ]}
-      />
-    <div className="container mx-auto py-6 space-y-6">
+      <PageContainer>
+        <PageHeader
+          title="Permissões"
+          description="Configure as permissões de acesso para cada função"
+          icon={<Shield className="h-6 w-6" />}
+          breadcrumbs={[
+            { label: 'Admin', href: base },
+            { label: 'Configurações' },
+            { label: 'Permissões' }
+          ]}
+        />
+    <div className="mt-6 space-y-6">
       {/* Header com botões */}
       <div ref={headerRef} className="flex items-center justify-end">
         {pendingChanges > 0 && (
@@ -586,6 +589,7 @@ export default function PermissoesPage() {
         </Button>
       </div>
     </div>
+    </PageContainer>
     </ProtectedPage>
   )
 }

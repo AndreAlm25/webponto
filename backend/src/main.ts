@@ -1,11 +1,20 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 // import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';  // TODO: Instalar @nestjs/swagger
 import { AppModule } from './app.module';
 import { MinioService } from './common/minio.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Helmet - Headers de segurança HTTP
+  // Protege contra XSS, clickjacking, sniffing, etc.
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Permite carregar recursos de outras origens (MinIO)
+    contentSecurityPolicy: false, // Desabilitado para não bloquear scripts inline do frontend
+  }));
+  console.log('🛡️ Helmet configurado (headers de segurança)');
 
   // Garantir que os buckets do MinIO existam
   const minioService = app.get(MinioService);
@@ -20,11 +29,21 @@ async function bootstrap() {
     }),
   );
 
-  // CORS - Aberto para SaaS (aceita qualquer origem)
+  // CORS - Configuração segura
+  // Em produção, substituir por domínios específicos
+  const allowedOrigins = process.env.CORS_ORIGINS 
+    ? process.env.CORS_ORIGINS.split(',') 
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  
   app.enableCors({
-    origin: true,  // Aceita QUALQUER origem
+    origin: process.env.NODE_ENV === 'production' 
+      ? allowedOrigins 
+      : true, // Em desenvolvimento, aceita qualquer origem
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
+  console.log(`🔒 CORS configurado (${process.env.NODE_ENV === 'production' ? 'restrito' : 'aberto para dev'})`);
 
   // Prefixo global
   app.setGlobalPrefix('api');

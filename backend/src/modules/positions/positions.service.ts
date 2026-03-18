@@ -14,6 +14,9 @@ export class PositionsService {
         id: true,
         name: true,
         companyId: true,
+        _count: {
+          select: { employees: true }
+        }
       },
     })
     return items
@@ -27,5 +30,31 @@ export class PositionsService {
       },
     })
     return created
+  }
+
+  // Atualizar cargo
+  async update(id: string, data: { name: string }) {
+    const updated = await this.prisma.position.update({
+      where: { id },
+      data: { name: data.name },
+    })
+    return updated
+  }
+
+  // Deletar cargo
+  async delete(id: string) {
+    // Verificar se há funcionários usando este cargo
+    const employeesCount = await this.prisma.employee.count({
+      where: { positionId: id },
+    })
+    
+    if (employeesCount > 0) {
+      throw new Error(`Não é possível excluir: ${employeesCount} funcionário(s) estão usando este cargo`)
+    }
+    
+    await this.prisma.position.delete({
+      where: { id },
+    })
+    return { success: true }
   }
 }

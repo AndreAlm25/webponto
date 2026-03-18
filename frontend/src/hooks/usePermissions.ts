@@ -81,6 +81,10 @@ export const PERMISSIONS = {
   SETTINGS_VIEW: 'settings.view',
   SETTINGS_EDIT: 'settings.edit',
 
+  // Empresa
+  COMPANY_VIEW: 'company.view',
+  COMPANY_EDIT: 'company.edit',
+
   // Permissões
   PERMISSIONS_VIEW: 'permissions.view',
   PERMISSIONS_EDIT: 'permissions.edit',

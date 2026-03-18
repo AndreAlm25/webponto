@@ -53,9 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  // Carregar usuário autenticado ao iniciar
+  // Carregar usuário autenticado ao iniciar (com retry para conexões lentas/tunnel)
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUser = async (attempt = 1): Promise<void> => {
       const token = localStorage.getItem('token')
       
       if (!token) {
@@ -63,13 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      // Buscar dados do usuário no backend
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
-        const response = await fetch(`${apiUrl}/api/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+        const response = await fetch(`/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` },
         })
 
         if (response.ok) {
@@ -77,18 +73,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (contentType && contentType.includes('application/json')) {
             const userData = await response.json()
             setUser(userData)
-          } else {
-            // Resposta inválida, remover token
-            localStorage.removeItem('token')
+            setLoading(false)
+            return
           }
-        } else {
-          // Token inválido, remover
+          // Resposta OK mas não é JSON (ex: Cloudflare HTML de aviso) — tenta novamente
+          if (attempt < 4) {
+            setTimeout(() => loadUser(attempt + 1), attempt * 1500)
+            return
+          }
+        } else if (response.status === 401 || response.status === 403) {
+          // Token inválido/expirado — remove e desiste
           localStorage.removeItem('token')
         }
+        // Outros erros ou esgotou tentativas
+        setLoading(false)
       } catch (error) {
-        console.error('Erro ao carregar usuário:', error)
-        localStorage.removeItem('token')
-      } finally {
+        // Erro de rede — tenta novamente até 3 vezes
+        if (attempt < 4) {
+          setTimeout(() => loadUser(attempt + 1), attempt * 1500)
+          return
+        }
+        console.error('Erro de rede ao carregar usuário (desistindo):', error)
         setLoading(false)
       }
     }
@@ -99,8 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, senha: string) => {
     try {
       // Conectar com backend
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
-      const response = await fetch(`${apiUrl}/api/auth/login`, {
+      const response = await fetch(`/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -197,8 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) return
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
-      const response = await fetch(`${apiUrl}/api/auth/me`, {
+      const response = await fetch(`/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

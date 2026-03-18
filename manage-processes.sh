@@ -32,8 +32,10 @@ list_processes() {
     declare -a PORTS
     local index=1
     
-    # Next.js (Frontend)
+    # Next.js (Frontend) - usando pipe ao invés de process substitution
+    local next_procs=$(ps aux | grep "next dev" | grep -v grep)
     while IFS= read -r line; do
+        [ -z "$line" ] && continue
         pid=$(echo "$line" | awk '{print $2}')
         port=$(lsof -p "$pid" 2>/dev/null | grep LISTEN | grep -oP ':\K[0-9]+' | head -1)
         if [ -n "$pid" ]; then
@@ -42,14 +44,16 @@ list_processes() {
             PORTS[$index]=${port:-"N/A"}
             echo -e "${GREEN}[$index]${NC} ${BOLD}Next.js Frontend${NC}"
             echo -e "    PID: ${YELLOW}$pid${NC} | Porta: ${PURPLE}${port:-"N/A"}${NC}"
-            echo -e "    Comando: $(ps -p $pid -o cmd= | cut -c1-60)..."
+            echo -e "    Comando: $(ps -p $pid -o cmd= 2>/dev/null | cut -c1-60)..."
             echo ""
             ((index++))
         fi
-    done < <(ps aux | grep "next dev" | grep -v grep)
+    done <<< "$next_procs"
     
     # Nest.js (Backend)
+    local nest_procs=$(ps aux | grep "nest start" | grep -v grep)
     while IFS= read -r line; do
+        [ -z "$line" ] && continue
         pid=$(echo "$line" | awk '{print $2}')
         port=$(lsof -p "$pid" 2>/dev/null | grep LISTEN | grep -oP ':\K[0-9]+' | head -1)
         if [ -n "$pid" ]; then
@@ -58,14 +62,16 @@ list_processes() {
             PORTS[$index]=${port:-"4000"}
             echo -e "${GREEN}[$index]${NC} ${BOLD}Nest.js Backend${NC}"
             echo -e "    PID: ${YELLOW}$pid${NC} | Porta: ${PURPLE}${port:-"4000"}${NC}"
-            echo -e "    Comando: $(ps -p $pid -o cmd= | cut -c1-60)..."
+            echo -e "    Comando: $(ps -p $pid -o cmd= 2>/dev/null | cut -c1-60)..."
             echo ""
             ((index++))
         fi
-    done < <(ps aux | grep "nest start" | grep -v grep)
+    done <<< "$nest_procs"
     
     # Prisma Studio
+    local prisma_procs=$(ps aux | grep "prisma studio" | grep -v grep)
     while IFS= read -r line; do
+        [ -z "$line" ] && continue
         pid=$(echo "$line" | awk '{print $2}')
         port=$(lsof -p "$pid" 2>/dev/null | grep LISTEN | grep -oP ':\K[0-9]+' | head -1)
         if [ -n "$pid" ]; then
@@ -74,15 +80,17 @@ list_processes() {
             PORTS[$index]=${port:-"5555"}
             echo -e "${GREEN}[$index]${NC} ${BOLD}Prisma Studio${NC}"
             echo -e "    PID: ${YELLOW}$pid${NC} | Porta: ${PURPLE}${port:-"5555"}${NC}"
-            echo -e "    Comando: $(ps -p $pid -o cmd= | cut -c1-60)..."
+            echo -e "    Comando: $(ps -p $pid -o cmd= 2>/dev/null | cut -c1-60)..."
             echo ""
             ((index++))
         fi
-    done < <(ps aux | grep "prisma studio" | grep -v grep)
+    done <<< "$prisma_procs"
     
     # Docker Containers
     if command -v docker &> /dev/null; then
+        local docker_procs=$(docker ps --filter "name=webponto" --format "{{.ID}} {{.Names}} {{.Ports}}" 2>/dev/null)
         while IFS= read -r line; do
+            [ -z "$line" ] && continue
             container_id=$(echo "$line" | awk '{print $1}')
             container_name=$(echo "$line" | awk '{print $2}')
             container_ports=$(echo "$line" | awk '{print $3}')
@@ -96,7 +104,7 @@ list_processes() {
                 echo ""
                 ((index++))
             fi
-        done < <(docker ps --filter "name=webponto" --format "{{.ID}} {{.Names}} {{.Ports}}" 2>/dev/null)
+        done <<< "$docker_procs"
     fi
     
     # Se não houver processos
@@ -235,7 +243,8 @@ start_services() {
     echo -e "${GREEN}[5]${NC} Docker Containers"
     echo -e "${GREEN}[0]${NC} Voltar"
     echo ""
-    read -p "Escolha uma opção: " choice
+    echo -n "Escolha uma opção: "
+    read choice </dev/tty
     
     case $choice in
         1)
@@ -296,7 +305,8 @@ main_menu() {
             echo -e "${GREEN}[Q]${NC} Sair"
             echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo ""
-            read -p "Escolha uma opção: " choice
+            echo -n "Escolha uma opção: "
+            read choice </dev/tty
             
             case $choice in
                 [1-9]|[1-9][0-9])
@@ -347,7 +357,8 @@ main_menu() {
             echo -e "${GREEN}[Q]${NC} Sair"
             echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo ""
-            read -p "Escolha uma opção: " choice
+            echo -n "Escolha uma opção: "
+            read choice </dev/tty
             
             case $choice in
                 [Ss])

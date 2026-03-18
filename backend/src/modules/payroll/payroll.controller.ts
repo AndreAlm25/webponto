@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, Req, Res
 import { Response } from 'express'
 import { PayrollService } from './payroll.service'
 import { PayslipPdfService } from './payslip-pdf.service'
+import { PrismaService } from '../../prisma/prisma.service'
 
 // Controlador de Folha de Pagamento
 // - Gerencia folhas de pagamento, holerites, configurações e benefícios
@@ -10,6 +11,7 @@ export class PayrollController {
   constructor(
     private readonly payrollService: PayrollService,
     private readonly payslipPdfService: PayslipPdfService,
+    private readonly prisma: PrismaService,
   ) {}
 
   // ==========================================
@@ -136,6 +138,52 @@ export class PayrollController {
     return this.payrollService.getOrCreatePayroll(companyId, m, y)
   }
 
+  // ==========================================
+  // ROTAS ESPECÍFICAS (devem vir ANTES das rotas com :id)
+  // ==========================================
+
+  // GET /api/payroll/payslips/employee/:employeeId
+  // Listar holerites de um funcionário
+  @Get('payslips/employee/:employeeId')
+  async listEmployeePayslips(@Param('employeeId') employeeId: string) {
+    return this.payrollService.listEmployeePayslips(employeeId)
+  }
+
+  // GET /api/payroll/preview/:employeeId
+  // Previsão em tempo real do holerite do mês atual (sem salvar no banco)
+  // Usado no dashboard do funcionário para mostrar estimativa antes do fechamento
+  @Get('preview/:employeeId')
+  async getPayslipPreview(
+    @Param('employeeId') employeeId: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ) {
+    const now = new Date()
+    const targetMonth = month ? parseInt(month) : now.getMonth() + 1
+    const targetYear = year ? parseInt(year) : now.getFullYear()
+    return this.payrollService.getPayslipPreview(employeeId, targetMonth, targetYear)
+  }
+
+  // POST /api/payroll/payslips/approve
+  // Aprovar múltiplos holerites
+  @Post('payslips/approve')
+  async approveMultiplePayslips(@Body() data: { payslipIds: string[] }, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.approveMultiplePayslips(data.payslipIds, userId)
+  }
+
+  // POST /api/payroll/payslips/pay
+  // Pagar múltiplos holerites
+  @Post('payslips/pay')
+  async payMultiplePayslips(@Body() data: { payslipIds: string[] }, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.payMultiplePayslips(data.payslipIds, userId)
+  }
+
+  // ==========================================
+  // ROTAS COM :id (devem vir DEPOIS das rotas específicas)
+  // ==========================================
+
   // GET /api/payroll/:id
   // Buscar folha de pagamento por ID
   @Get(':id')
@@ -165,13 +213,6 @@ export class PayrollController {
     return this.payrollService.markAsPaid(id)
   }
 
-  // GET /api/payroll/payslips/employee/:employeeId
-  // Listar holerites de um funcionário
-  @Get('payslips/employee/:employeeId')
-  async listEmployeePayslips(@Param('employeeId') employeeId: string) {
-    return this.payrollService.listEmployeePayslips(employeeId)
-  }
-
   // GET /api/payroll/payslip/:id
   // Buscar holerite individual
   @Get('payslip/:id')
@@ -184,6 +225,22 @@ export class PayrollController {
   @Put('payslip/:id')
   async updatePayslip(@Param('id') id: string, @Body() data: any) {
     return this.payrollService.updatePayslip(id, data)
+  }
+
+  // POST /api/payroll/payslip/:id/approve
+  // Aprovar holerite individual
+  @Post('payslip/:id/approve')
+  async approvePayslip(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.approvePayslip(id, userId)
+  }
+
+  // POST /api/payroll/payslip/:id/pay
+  // Pagar holerite individual
+  @Post('payslip/:id/pay')
+  async payPayslip(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.payPayslip(id, userId)
   }
 
   // POST /api/payroll/payslip/:id/viewed
@@ -211,6 +268,82 @@ export class PayrollController {
     const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown'
     const device = req.headers['user-agent'] || 'unknown'
     return this.payrollService.signPayslip(id, data.acceptTerms, ip, device)
+  }
+
+  // POST /api/payroll/payslip/:id/accept
+  // Funcionário aceita o holerite (👍)
+  @Post('payslip/:id/accept')
+  async acceptPayslip(@Param('id') id: string, @Req() req: any) {
+    // Buscar o holerite para pegar o employeeId
+    const payslip = await this.prisma.payslip.findUnique({ where: { id } })
+    if (!payslip) {
+      throw new Error('Holerite não encontrado')
+    }
+    
+    console.log('[ACCEPT] payslip.employeeId:', payslip.employeeId, 'user:', req.user?.email)
+    
+    return this.payrollService.acceptPayslip(id, payslip.employeeId)
+  }
+
+  // POST /api/payroll/payslip/:id/reject
+  // Funcionário rejeita o holerite (👎)
+  @Post('payslip/:id/reject')
+  async rejectPayslip(
+    @Param('id') id: string,
+    @Body() data: { reason: string },
+    @Req() req: any,
+  ) {
+    // Buscar o holerite para pegar o employeeId
+    const payslip = await this.prisma.payslip.findUnique({ where: { id } })
+    if (!payslip) {
+      throw new Error('Holerite não encontrado')
+    }
+    
+    console.log('[REJECT] payslip.employeeId:', payslip.employeeId, 'reason:', data.reason)
+    
+    return this.payrollService.rejectPayslip(id, payslip.employeeId, data.reason)
+  }
+
+  // POST /api/payroll/payslip/:id/reapprove
+  // Admin reaprova holerite rejeitado
+  @Post('payslip/:id/reapprove')
+  async reapprovePayslip(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.reapprovePayslip(id, userId)
+  }
+
+  // ==========================================
+  // PARCELAS DE PAGAMENTO (INSTALLMENTS)
+  // ==========================================
+
+  // GET /api/payroll/payslip/:id/installments
+  // Listar parcelas de um holerite
+  @Get('payslip/:id/installments')
+  async listPayslipInstallments(@Param('id') id: string) {
+    return this.payrollService.listPayslipInstallments(id)
+  }
+
+  // POST /api/payroll/installment/:id/pay
+  // Pagar uma parcela específica
+  @Post('installment/:id/pay')
+  async payInstallment(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.payInstallment(id, userId)
+  }
+
+  // POST /api/payroll/payslip/:id/pay-all-installments
+  // Pagar todas as parcelas pendentes de um holerite
+  @Post('payslip/:id/pay-all-installments')
+  async payAllInstallments(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.payAllInstallments(id, userId)
+  }
+
+  // GET /api/payroll/overdue-installments
+  // Listar parcelas atrasadas (para alertas/notificações)
+  @Get('overdue-installments')
+  async listOverdueInstallments(@Query('companyId') companyId: string) {
+    return this.payrollService.listOverdueInstallments(companyId)
   }
 
   // GET /api/payroll/payslip/:id/pdf
@@ -400,5 +533,113 @@ export class PayrollController {
   @Delete('advances/:id')
   async cancelAdvance(@Param('id') id: string) {
     return this.payrollService.cancelAdvance(id)
+  }
+
+  // ==========================================
+  // ATESTADOS MÉDICOS
+  // ==========================================
+
+  // GET /api/payroll/medical-certificates
+  // Listar atestados médicos
+  @Get('medical-certificates')
+  async listMedicalCertificates(
+    @Query('companyId') companyId: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('status') status?: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ) {
+    try {
+      console.log('[PayrollController] listMedicalCertificates', { companyId, employeeId, status, month, year })
+      const result = await this.payrollService.listMedicalCertificates(companyId, {
+        employeeId,
+        status,
+        month: month ? parseInt(month) : undefined,
+        year: year ? parseInt(year) : undefined,
+      })
+      console.log('[PayrollController] listMedicalCertificates result:', result)
+      return result
+    } catch (error) {
+      console.error('[PayrollController] listMedicalCertificates ERROR:', error)
+      throw error
+    }
+  }
+
+  // GET /api/payroll/medical-certificates/:id
+  // Buscar atestado médico por ID
+  @Get('medical-certificates/:id')
+  async getMedicalCertificate(@Param('id') id: string) {
+    return this.payrollService.getMedicalCertificate(id)
+  }
+
+  // POST /api/payroll/medical-certificates
+  // Criar atestado médico
+  @Post('medical-certificates')
+  async createMedicalCertificate(
+    @Query('companyId') companyId: string,
+    @Body() data: {
+      employeeId: string
+      startDate: string
+      endDate: string
+      reason?: string
+      doctorName?: string
+      doctorCrm?: string
+      attachmentUrl?: string
+      notes?: string
+    },
+  ) {
+    return this.payrollService.createMedicalCertificate(companyId, data)
+  }
+
+  // PUT /api/payroll/medical-certificates/:id
+  // Atualizar atestado médico
+  @Put('medical-certificates/:id')
+  async updateMedicalCertificate(
+    @Param('id') id: string,
+    @Body() data: {
+      startDate?: string
+      endDate?: string
+      reason?: string
+      doctorName?: string
+      doctorCrm?: string
+      attachmentUrl?: string
+      notes?: string
+    },
+  ) {
+    return this.payrollService.updateMedicalCertificate(id, data)
+  }
+
+  // POST /api/payroll/medical-certificates/:id/approve
+  // Aprovar atestado médico
+  @Post('medical-certificates/:id/approve')
+  async approveMedicalCertificate(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.approveMedicalCertificate(id, userId)
+  }
+
+  // POST /api/payroll/medical-certificates/:id/reject
+  // Rejeitar atestado médico
+  @Post('medical-certificates/:id/reject')
+  async rejectMedicalCertificate(
+    @Param('id') id: string,
+    @Body() data: { reason?: string },
+    @Req() req: any,
+  ) {
+    const userId = req.user?.id || 'system'
+    return this.payrollService.rejectMedicalCertificate(id, userId, data.reason)
+  }
+
+  // DELETE /api/payroll/medical-certificates/:id
+  // Excluir atestado médico
+  @Delete('medical-certificates/:id')
+  async deleteMedicalCertificate(@Param('id') id: string) {
+    return this.payrollService.deleteMedicalCertificate(id)
+  }
+
+  // GET /api/payroll/medical-certificates/stats
+  // Estatísticas de atestados médicos
+  @Get('medical-certificates-stats')
+  async getMedicalCertificateStats(@Query('companyId') companyId: string) {
+    return this.payrollService.getMedicalCertificateStats(companyId)
   }
 }

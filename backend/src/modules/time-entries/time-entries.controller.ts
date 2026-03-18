@@ -24,7 +24,9 @@ import { CadastrarFaceDto } from './dto/cadastrar-face.dto';
 
 @Controller('time-entries')
 export class TimeEntriesController {
-  constructor(private readonly timeEntriesService: TimeEntriesService) {}
+  constructor(
+    private readonly timeEntriesService: TimeEntriesService,
+  ) {}
 
   /**
    * POST /pontos/facial
@@ -193,6 +195,43 @@ export class TimeEntriesController {
       inicio,
       fim,
       limitNum,
+    );
+  }
+
+  /**
+   * GET /time-entries/espelho/:employeeId
+   * Gerar Espelho de Ponto Mensal (Portaria 671)
+   */
+  @Get('espelho/:employeeId')
+  @UseGuards(JwtAuthGuard)
+  async gerarEspelhoPonto(
+    @Param('employeeId') employeeId: string,
+    @Query('mes') mes: string,
+    @Query('ano') ano: string,
+    @Request() req?,
+  ) {
+    const companyId: string | undefined = req.user?.companyId;
+    if (!companyId) {
+      throw new UnauthorizedException('Empresa não identificada');
+    }
+
+    // Validar parâmetros
+    const mesNum = mes ? parseInt(mes, 10) : new Date().getMonth() + 1;
+    const anoNum = ano ? parseInt(ano, 10) : new Date().getFullYear();
+
+    if (mesNum < 1 || mesNum > 12) {
+      throw new BadRequestException('Mês inválido. Use valores de 1 a 12.');
+    }
+
+    if (anoNum < 2020 || anoNum > 2100) {
+      throw new BadRequestException('Ano inválido.');
+    }
+
+    return await this.timeEntriesService.gerarEspelhoPonto(
+      employeeId,
+      companyId,
+      mesNum,
+      anoNum,
     );
   }
 

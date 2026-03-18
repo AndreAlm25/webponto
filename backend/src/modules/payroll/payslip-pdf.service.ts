@@ -445,8 +445,8 @@ export class PayslipPdfService {
       })
     }
 
-    // Adiantamento Salarial
-    if (config?.enableSalaryAdvance && Number(payslip.salaryAdvanceValue) > 0) {
+    // Adiantamento Salarial (do Modo de Pagamento Vale + Saldo)
+    if (Number(payslip.salaryAdvanceValue) > 0) {
       descontos.push({
         desc: 'Adiantamento Salarial',
         ref: '',

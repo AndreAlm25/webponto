@@ -13,6 +13,7 @@ import EditEmployeeModal from '@/components/admin/EditEmployeeModal'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 
@@ -145,7 +146,8 @@ export default function EmployeesPage({ params }: { params: { company: string } 
 
   return (
     <ProtectedPage permission={PERMISSIONS.EMPLOYEES_VIEW}>
-      <PageHeader
+      <PageContainer>
+        <PageHeader
         title="Funcionários"
         description="Gerencie sua equipe"
         icon={<Users className="h-6 w-6" />}
@@ -156,7 +158,7 @@ export default function EmployeesPage({ params }: { params: { company: string } 
         ]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Lista de funcionários - 2 colunas */}
         <section className="lg:col-span-2 border border-border rounded-lg bg-card">
           <div className="p-4 border-b border-border">
@@ -247,6 +249,7 @@ export default function EmployeesPage({ params }: { params: { company: string } 
           employeeId={selectedEmployeeId}
         />
       )}
+      </PageContainer>
     </ProtectedPage>
   )
 }

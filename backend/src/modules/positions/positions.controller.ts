@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, UseGuards, BadRequestException } from '@nestjs/common'
 import { PositionsService } from './positions.service'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { PermissionGuard } from '../../common/guards'
@@ -22,5 +22,23 @@ export class PositionsController {
   @RequirePermission('positions.create')
   async create(@Body() body: { companyId: string; name: string }) {
     return this.service.create(body)
+  }
+
+  // PUT /api/positions/:id
+  @Put(':id')
+  @RequirePermission('positions.edit')
+  async update(@Param('id') id: string, @Body() body: { name: string }) {
+    return this.service.update(id, body)
+  }
+
+  // DELETE /api/positions/:id
+  @Delete(':id')
+  @RequirePermission('positions.delete')
+  async delete(@Param('id') id: string) {
+    try {
+      return await this.service.delete(id)
+    } catch (error) {
+      throw new BadRequestException(error.message)
+    }
   }
 }

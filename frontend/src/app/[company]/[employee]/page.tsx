@@ -8,7 +8,8 @@ import {
   X, MessageCircleMore, MapPin, MapPinCheck, ScanFace, ClockArrowUp, ClockArrowDown, 
   Clock12, Clock2, UserRound, Clock, Clock11, ChartBarStacked, Calendar, LayoutDashboard,
   FileText, Wallet, BarChart3, ChevronLeft, ChevronRight, Download, CheckCircle, AlertCircle, Fingerprint,
-  TrendingUp, DollarSign, CalendarDays, ClipboardCheck, Banknote, Timer, UserX, Clock3, Building2
+  TrendingUp, DollarSign, CalendarDays, ClipboardCheck, Banknote, Timer, UserX, Clock3, Building2,
+  ThumbsUp, ThumbsDown, RefreshCw, Palmtree, Send, Plus, Minus, Loader2, FileSignature
 } from 'lucide-react'
 import { ActionButton } from '@/components/ActionButton'
 import { MessageModal } from '@/components/MessageModal'
@@ -26,7 +27,7 @@ const roboto = Roboto({ subsets: ['latin'], weight: ['400', '700', '900'] })
 export default function EmployeeCompanyPage({ params }: { params: { company: string, employee: string } }) {
   const router = useRouter()
   const { logout, user, refreshUser, loading: authLoading, isAuthenticated } = useAuth()
-  const { onTimeEntryCreated, onEmployeeUpdated, onFaceRegistered, onFaceDeleted, connected } = useWebSocket()
+  const { onTimeEntryCreated, onEmployeeUpdated, onFaceRegistered, onFaceDeleted, onVacationRequestUpdated, connected } = useWebSocket()
   const { unreadCount } = useMessages()
   const { company, employee } = params
   
@@ -60,6 +61,10 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
   const [hasScrolledToEnd, setHasScrolledToEnd] = React.useState(false)
   const [showSignModal, setShowSignModal] = React.useState(false)
   const [isSigning, setIsSigning] = React.useState(false)
+  const [showRejectForm, setShowRejectForm] = React.useState(false)
+  const [rejectReason, setRejectReason] = React.useState('')
+  const [isAccepting, setIsAccepting] = React.useState(false)
+  const [isRejecting, setIsRejecting] = React.useState(false)
   const [showRequestModal, setShowRequestModal] = React.useState(false)
   const [newAdvanceAmount, setNewAdvanceAmount] = React.useState(0)
   const [newAdvanceReason, setNewAdvanceReason] = React.useState('')
@@ -72,6 +77,25 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
   const [payslipFilterYear, setPayslipFilterYear] = React.useState<number | null>(null)
   const [payslipFilterMonth, setPayslipFilterMonth] = React.useState<number | null>(null)
   const [availableYears, setAvailableYears] = React.useState<number[]>([])
+  
+  // Estados para férias
+  const [vacationData, setVacationData] = React.useState<any>(null)
+  const [vacationRequests, setVacationRequests] = React.useState<any[]>([])
+  const [canRequestVacation, setCanRequestVacation] = React.useState<any>(null)
+  const [loadingVacations, setLoadingVacations] = React.useState(false)
+  const [showVacationRequestModal, setShowVacationRequestModal] = React.useState(false)
+  const [vacationRequestStartDate, setVacationRequestStartDate] = React.useState('')
+  const [vacationRequestDays, setVacationRequestDays] = React.useState(30)
+  const [vacationSellDays, setVacationSellDays] = React.useState(0)
+  const [vacationNotes, setVacationNotes] = React.useState('')
+  const [submittingVacationRequest, setSubmittingVacationRequest] = React.useState(false)
+  const [selectedVacationId, setSelectedVacationId] = React.useState<string | null>(null)
+  const [selectedPeriodAcquisitionStart, setSelectedPeriodAcquisitionStart] = React.useState<string | null>(null)
+  const [showVacationSignModal, setShowVacationSignModal] = React.useState(false)
+  const [selectedVacationRequest, setSelectedVacationRequest] = React.useState<any>(null)
+  const [vacationSignScrolled, setVacationSignScrolled] = React.useState(false)
+  const [signingVacation, setSigningVacation] = React.useState(false)
+  const [showVacationSignConfirm, setShowVacationSignConfirm] = React.useState(false)
   
   // Constantes
   const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -302,7 +326,11 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
       
       if (res.ok) {
         const data = await res.json()
-        setPayslips(data.payslips || [])
+        // Funcionário só vê holerites após aprovação (APPROVED, ACCEPTED, REJECTED, PAID)
+        const visiblePayslips = (data.payslips || []).filter((p: any) => 
+          ['APPROVED', 'ACCEPTED', 'REJECTED', 'PAID'].includes(p.status)
+        )
+        setPayslips(visiblePayslips)
       }
     } catch (error) {
       console.error('Erro ao buscar holerites:', error)
@@ -376,7 +404,7 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
       const lastDay = new Date(year, month, 0).getDate() // Último dia do mês
       const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
-      const [entriesRes, payslipsRes, advancesRes] = await Promise.all([
+      const [entriesRes, payslipsRes, advancesRes, previewRes] = await Promise.all([
         fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/time-entries?companyId=${companyId}&employeeId=${employeeId}&startDate=${startDate}&endDate=${endDate}`,
           { headers: { Authorization: `Bearer ${token}` } }
@@ -387,6 +415,11 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
         ),
         fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/advances/employee/${employeeId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        ),
+        // Buscar previsão em tempo real do holerite do mês atual
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/preview/${employeeId}?month=${month}&year=${year}`,
           { headers: { Authorization: `Bearer ${token}` } }
         )
       ])
@@ -493,41 +526,130 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
       }
       
       // Separar holerites por mês
-      const lastPaidPayslip = slips.find((p: any) => p.signedAt) || slips[0]
+      // Pegar o último holerite que NÃO seja do mês atual (mês anterior fechado)
+      const sortedSlips = [...slips].sort((a: any, b: any) => {
+        if (a.referenceYear !== b.referenceYear) return b.referenceYear - a.referenceYear
+        return b.referenceMonth - a.referenceMonth
+      })
+      const lastPaidPayslip = sortedSlips.find((p: any) => 
+        !(p.referenceMonth === month && p.referenceYear === year) && 
+        (p.status === 'PAID' || p.status === 'APPROVED' || p.signedAt)
+      ) || sortedSlips.find((p: any) => p.referenceMonth !== month || p.referenceYear !== year)
       const currentMonthPayslip = slips.find((p: any) => 
         p.referenceMonth === month && p.referenceYear === year
       )
       
-      // Pegar salário base do funcionário (do employeeData ou do último holerite)
-      const employeeSalary = (user as any)?.employee?.salary || 
-                            (user as any)?.funcionario?.salary ||
-                            lastPaidPayslip?.baseSalary || 0
+      // Buscar previsão em tempo real do backend
+      let previewData: any = null
+      console.log('[Dashboard] Preview URL:', `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/preview/${employeeId}?month=${month}&year=${year}`)
+      console.log('[Dashboard] Preview response status:', previewRes.status, previewRes.ok)
+      if (previewRes.ok) {
+        const preview = await previewRes.json()
+        console.log('[Dashboard] Preview response:', preview)
+        if (preview.success) {
+          previewData = preview
+          console.log('[Dashboard] Preview data loaded:', {
+            isPreview: preview.isPreview,
+            hasOfficialPayslip: preview.hasOfficialPayslip,
+            daysRemaining: preview.daysRemaining,
+            netSalary: preview.preview?.netSalary,
+            inssValue: preview.preview?.inssValue,
+            totalDeductions: preview.preview?.totalDeductions,
+          })
+        } else {
+          console.log('[Dashboard] Preview error:', preview.error)
+        }
+      } else {
+        console.log('[Dashboard] Preview fetch failed:', previewRes.status)
+      }
       
-      // Calcular previsão do mês atual
-      const baseSalary = Number(employeeSalary) || 0
-      const currentDeductions = currentMonthAdvances // Por enquanto só adiantamentos
-      const estimatedNet = baseSalary - currentDeductions
+      // Usar dados da previsão em tempo real (mais precisos)
+      // Se não tiver previsão, usar dados do holerite existente
+      const forecast = previewData?.preview || {}
+      const ps = currentMonthPayslip || {}
+      
+      // Função helper para converter Decimal/string para número
+      const toNum = (val: any) => val !== undefined && val !== null ? Number(val) : 0
+      
+      // Normalizar dados do holerite existente
+      const payslipData = {
+        baseSalary: toNum(ps.baseSalary),
+        totalEarnings: toNum(ps.totalEarnings),
+        inssValue: toNum(ps.inssValue),
+        inssRate: toNum(ps.inssRate),
+        irValue: toNum(ps.irValue),
+        irRate: toNum(ps.irRate),
+        transportVoucher: toNum(ps.transportVoucher),
+        healthInsurance: toNum(ps.healthInsurance),
+        dentalInsurance: toNum(ps.dentalInsurance),
+        lateValue: toNum(ps.lateValue),
+        lateDiscounted: ps.lateDiscounted ?? true,
+        absenceValue: toNum(ps.absenceValue),
+        absenceDays: toNum(ps.absenceDays),
+        lateMinutes: toNum(ps.lateMinutes),
+        advancePayment: toNum(ps.advancePayment),
+        totalDeductions: toNum(ps.totalDeductions),
+        netSalary: toNum(ps.netSalary),
+        fgtsBase: toNum(ps.fgtsBase),
+        fgtsValue: toNum(ps.fgtsValue),
+        overtimeHours50: toNum(ps.overtimeHours50),
+        overtimeValue50: toNum(ps.overtimeValue50),
+        overtimeHours100: toNum(ps.overtimeHours100),
+        overtimeValue100: toNum(ps.overtimeValue100),
+      }
+      
+      const baseSalary = toNum(forecast.baseSalary) || payslipData.baseSalary || 0
+      
+      console.log('[Dashboard] Using forecast:', Object.keys(forecast).length > 0 ? 'preview' : 'payslip')
+      console.log('[Dashboard] Payslip data normalized:', payslipData)
       
       setDashboardData({
         // Mês atual
-        workedDays,
-        totalHours: Math.round(totalHours * 10) / 10,
+        workedDays: forecast.workedDays || workedDays,
+        totalHours: Math.round((forecast.workedHours || totalHours) * 10) / 10,
         currentMonth: MONTHS[month - 1],
         currentYear: year,
         
-        // Faltas e atrasos do mês atual
-        absences,
-        lateMinutes,
+        // Faltas e atrasos do mês atual (da previsão em tempo real)
+        absences: forecast.absenceDays || payslipData.absenceDays || absences,
+        lateMinutes: forecast.lateMinutes || payslipData.lateMinutes || lateMinutes,
         
-        // Previsão do mês atual (calculada ou do holerite se existir)
+        // Previsão do mês atual (dados completos do backend ou do holerite existente)
         salaryForecast: {
-          baseSalary: currentMonthPayslip?.baseSalary || baseSalary,
-          currentDeductions: currentMonthPayslip?.totalDeductions || currentDeductions,
-          estimatedNet: currentMonthPayslip?.netSalary || estimatedNet,
-          advancesThisMonth: currentMonthAdvances,
-          hasPayslip: !!currentMonthPayslip,
+          baseSalary: baseSalary,
+          totalEarnings: toNum(forecast.totalEarnings) || payslipData.totalEarnings || baseSalary,
+          // Descontos detalhados (usar previsão ou holerite)
+          inssValue: toNum(forecast.inssValue) || payslipData.inssValue,
+          inssRate: toNum(forecast.inssRate) || payslipData.inssRate,
+          irValue: toNum(forecast.irValue) || payslipData.irValue,
+          irRate: toNum(forecast.irRate) || payslipData.irRate,
+          transportVoucher: toNum(forecast.transportVoucher) || payslipData.transportVoucher,
+          healthInsurance: toNum(forecast.healthInsurance) || payslipData.healthInsurance,
+          dentalInsurance: toNum(forecast.dentalInsurance) || payslipData.dentalInsurance,
+          lateValue: toNum(forecast.lateValue) || payslipData.lateValue,
+          lateDiscounted: forecast.lateDiscounted ?? payslipData.lateDiscounted,
+          absenceValue: toNum(forecast.absenceValue) || payslipData.absenceValue,
+          advancePayment: toNum(forecast.advancePayment) || payslipData.advancePayment || currentMonthAdvances,
+          // Totais
+          totalDeductions: toNum(forecast.totalDeductions) || payslipData.totalDeductions,
+          netSalary: toNum(forecast.netSalary) || payslipData.netSalary,
+          // FGTS (informativo)
+          fgtsBase: toNum(forecast.fgtsBase) || payslipData.fgtsBase,
+          fgtsValue: toNum(forecast.fgtsValue) || payslipData.fgtsValue,
+          // Horas extras
+          overtimeHours50: toNum(forecast.overtimeHours50) || payslipData.overtimeHours50,
+          overtimeValue50: toNum(forecast.overtimeValue50) || payslipData.overtimeValue50,
+          overtimeHours100: toNum(forecast.overtimeHours100) || payslipData.overtimeHours100,
+          overtimeValue100: toNum(forecast.overtimeValue100) || payslipData.overtimeValue100,
+          // Status
+          hasPayslip: previewData?.hasOfficialPayslip || !!currentMonthPayslip,
+          isPreview: !currentMonthPayslip && (previewData?.isPreview ?? true),
+          daysRemaining: previewData?.daysRemaining || 0,
         },
-        paymentDay: 5, // Valor padrão, será atualizado quando abrir o painel
+        paymentDay: 5, // Valor padrão
+        
+        // Configurações
+        config: previewData?.config || {},
         
         // Mês anterior
         lastPayslip: lastPaidPayslip ? {
@@ -683,8 +805,15 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
           // Separar holerites por mês
           const pendingPayslipsList = slips.filter((p: any) => !p.signedAt)
           
-          // Encontrar o último holerite pago/assinado (mês anterior)
-          const lastPaidPayslip = slips.find((p: any) => p.signedAt) || slips[0]
+          // Encontrar o último holerite que NÃO seja do mês atual (mês anterior fechado)
+          const sortedSlipsPanel = [...slips].sort((a: any, b: any) => {
+            if (a.referenceYear !== b.referenceYear) return b.referenceYear - a.referenceYear
+            return b.referenceMonth - a.referenceMonth
+          })
+          const lastPaidPayslip = sortedSlipsPanel.find((p: any) => 
+            !(p.referenceMonth === month && p.referenceYear === year) && 
+            (p.status === 'PAID' || p.status === 'APPROVED' || p.signedAt)
+          ) || sortedSlipsPanel.find((p: any) => p.referenceMonth !== month || p.referenceYear !== year)
           const lastPayslipMonth = lastPaidPayslip ? lastPaidPayslip.referenceMonth : null
           const lastPayslipYear = lastPaidPayslip ? lastPaidPayslip.referenceYear : null
           
@@ -713,12 +842,22 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                                 (user as any)?.funcionario?.salary ||
                                 lastPaidPayslip?.baseSalary || 0
           
-          // Calcular previsão do mês atual
-          const baseSalary = currentMonthPayslip?.baseSalary || Number(employeeSalary) || 0
-          const currentDeductions = currentMonthPayslip?.totalDeductions || currentMonthAdvances
-          const estimatedNet = currentMonthPayslip?.netSalary || (baseSalary - currentMonthAdvances)
+          // Função helper para converter Decimal/string para número
+          const toNum = (val: any) => val !== undefined && val !== null ? Number(val) : 0
           
-          // Montar dados do dashboard
+          // Normalizar dados do holerite existente (se houver)
+          const ps = currentMonthPayslip || {}
+          const baseSalary = toNum(ps.baseSalary) || Number(employeeSalary) || 0
+          
+          console.log('[Panel] Current month payslip:', ps.id ? {
+            id: ps.id,
+            baseSalary: ps.baseSalary,
+            inssValue: ps.inssValue,
+            totalDeductions: ps.totalDeductions,
+            netSalary: ps.netSalary,
+          } : 'NOT FOUND')
+          
+          // Montar dados do dashboard com descontos detalhados
           setDashboardData({
             // Mês atual
             workedDays,
@@ -727,16 +866,40 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
             currentYear: year,
             
             // Faltas e atrasos do mês atual
-            absences,
-            lateMinutes,
+            absences: toNum(ps.absenceDays) || absences,
+            lateMinutes: toNum(ps.lateMinutes) || lateMinutes,
             
-            // Previsão do mês atual
+            // Previsão do mês atual (dados detalhados do holerite)
             salaryForecast: {
-              baseSalary,
-              currentDeductions,
-              estimatedNet,
-              advancesThisMonth: currentMonthAdvances,
+              baseSalary: baseSalary,
+              totalEarnings: toNum(ps.totalEarnings) || baseSalary,
+              // Descontos detalhados
+              inssValue: toNum(ps.inssValue),
+              inssRate: toNum(ps.inssRate),
+              irValue: toNum(ps.irValue),
+              irRate: toNum(ps.irRate),
+              transportVoucher: toNum(ps.transportVoucher),
+              healthInsurance: toNum(ps.healthInsurance),
+              dentalInsurance: toNum(ps.dentalInsurance),
+              lateValue: toNum(ps.lateValue),
+              lateDiscounted: ps.lateDiscounted ?? true,
+              absenceValue: toNum(ps.absenceValue),
+              advancePayment: toNum(ps.advancePayment) || currentMonthAdvances,
+              // Totais
+              totalDeductions: toNum(ps.totalDeductions),
+              netSalary: toNum(ps.netSalary),
+              // FGTS (informativo)
+              fgtsBase: toNum(ps.fgtsBase),
+              fgtsValue: toNum(ps.fgtsValue),
+              // Horas extras
+              overtimeHours50: toNum(ps.overtimeHours50),
+              overtimeValue50: toNum(ps.overtimeValue50),
+              overtimeHours100: toNum(ps.overtimeHours100),
+              overtimeValue100: toNum(ps.overtimeValue100),
+              // Status
               hasPayslip: !!currentMonthPayslip,
+              isPreview: !currentMonthPayslip,
+              daysRemaining: 0,
             },
             paymentDay,
             advancePaymentDay,
@@ -773,6 +936,270 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
       panelDataLoaded.current = false
     }
   }, [showPanel, user, MONTHS])
+
+  // ========== FUNÇÕES DE FÉRIAS ==========
+  
+  // Buscar dados de férias do funcionário
+  const fetchVacationData = React.useCallback(async () => {
+    if (!user) return
+    
+    setLoadingVacations(true)
+    try {
+      const token = localStorage.getItem('token')
+      const api = process.env.NEXT_PUBLIC_API_URL
+      
+      // Buscar férias e solicitações em paralelo
+      const [vacRes, canReqRes, reqRes] = await Promise.all([
+        fetch(`${api}/api/vacations/my-vacations`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch(`${api}/api/vacation-requests/can-request`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch(`${api}/api/vacation-requests/my-requests`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ])
+      
+      if (vacRes.ok) {
+        const data = await vacRes.json()
+        console.log('[FÉRIAS] Dados recebidos:', data)
+        setVacationData(data)
+      }
+      
+      if (canReqRes.ok) {
+        const data = await canReqRes.json()
+        console.log('[FÉRIAS] Pode solicitar:', data)
+        setCanRequestVacation(data)
+        if (data.availablePeriods?.length > 0) {
+          setSelectedVacationId(data.availablePeriods[0].id)
+        }
+      }
+      
+      if (reqRes.ok) {
+        const data = await reqRes.json()
+        console.log('[FÉRIAS] Minhas solicitações:', data)
+        setVacationRequests(data || [])
+      }
+    } catch (error) {
+      console.error('[FÉRIAS] Erro ao buscar dados:', error)
+    } finally {
+      setLoadingVacations(false)
+    }
+  }, [user])
+
+  // Carregar férias quando abrir o painel
+  React.useEffect(() => {
+    if (showPanel && user) {
+      fetchVacationData()
+    }
+  }, [showPanel, user, fetchVacationData])
+
+  // WebSocket: atualizar quando admin aprovar/rejeitar férias
+  React.useEffect(() => {
+    const unsub = onVacationRequestUpdated((request: any) => {
+      console.log('[FÉRIAS WS] Solicitação atualizada:', request)
+      // Atualizar na lista de solicitações
+      setVacationRequests(prev => 
+        prev.map(r => r.id === request.id ? { ...r, ...request } : r)
+      )
+      // Notificar o funcionário
+      if (request.status === 'APPROVED' || request.status === 'AWAITING_SIGNATURE') {
+        toast.success('Suas férias foram aprovadas!')
+      } else if (request.status === 'REJECTED') {
+        toast.error('Sua solicitação de férias foi rejeitada')
+      } else if (request.status === 'COUNTER_PROPOSAL') {
+        toast.info('O RH fez uma contraproposta para suas férias')
+      }
+    })
+
+    return () => unsub()
+  }, [onVacationRequestUpdated])
+
+  // Submeter solicitação de férias
+  const handleSubmitVacationRequest = async () => {
+    if (!vacationRequestStartDate) {
+      toast.error('Informe a data de início das férias')
+      return
+    }
+    
+    setSubmittingVacationRequest(true)
+    try {
+      const token = localStorage.getItem('token')
+      const api = process.env.NEXT_PUBLIC_API_URL
+      
+      const body = {
+        vacationId: selectedVacationId || undefined,
+        acquisitionStart: selectedPeriodAcquisitionStart || undefined,
+        requestedStartDate: vacationRequestStartDate,
+        requestedDays: vacationRequestDays - vacationSellDays,
+        sellDays: vacationSellDays,
+        employeeNotes: vacationNotes || undefined,
+      }
+      
+      console.log('[FÉRIAS FRONTEND] Enviando solicitação:', JSON.stringify(body, null, 2))
+      console.log('[FÉRIAS FRONTEND] selectedVacationId:', selectedVacationId)
+      console.log('[FÉRIAS FRONTEND] selectedPeriodAcquisitionStart:', selectedPeriodAcquisitionStart)
+      
+      const res = await fetch(`${api}/api/vacation-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      })
+      
+      if (res.ok) {
+        toast.success('Solicitação de férias enviada com sucesso!')
+        setShowVacationRequestModal(false)
+        setVacationRequestStartDate('')
+        setVacationRequestDays(30)
+        setVacationSellDays(0)
+        setVacationNotes('')
+        setSelectedPeriodAcquisitionStart(null)
+        fetchVacationData()
+      } else {
+        const error = await res.json()
+        if (error.violations) {
+          toast.error(error.violations.map((v: any) => v.message).join('. '))
+        } else {
+          toast.error(error.message || 'Erro ao enviar solicitação')
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao enviar solicitação:', error)
+      toast.error('Erro ao enviar solicitação')
+    } finally {
+      setSubmittingVacationRequest(false)
+    }
+  }
+
+  // Responder contraproposta
+  const handleRespondCounter = async (requestId: string, accepted: boolean) => {
+    try {
+      const token = localStorage.getItem('token')
+      const api = process.env.NEXT_PUBLIC_API_URL
+      
+      const res = await fetch(`${api}/api/vacation-requests/${requestId}/respond-counter`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ accepted }),
+      })
+      
+      if (res.ok) {
+        toast.success(accepted ? 'Contraproposta aceita!' : 'Contraproposta recusada')
+        fetchVacationData()
+      } else {
+        const error = await res.json()
+        toast.error(error.message || 'Erro ao responder')
+      }
+    } catch (error) {
+      toast.error('Erro ao responder contraproposta')
+    }
+  }
+
+  // Abrir modal de assinatura de férias
+  const openVacationSignModal = (request: any) => {
+    setSelectedVacationRequest(request)
+    // Carregar estado de scroll do banco (se já rolou antes)
+    setVacationSignScrolled(request.employeeScrolled || false)
+    setShowVacationSignModal(true)
+  }
+
+  // Marcar scroll de férias no backend e atualizar estado local
+  const handleVacationScroll = async (requestId: string) => {
+    try {
+      const token = localStorage.getItem('token')
+      const api = process.env.NEXT_PUBLIC_API_URL
+      await fetch(`${api}/api/vacation-requests/${requestId}/mark-scrolled`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      
+      // Atualizar o objeto selectedVacationRequest localmente
+      if (selectedVacationRequest && selectedVacationRequest.id === requestId) {
+        setSelectedVacationRequest({
+          ...selectedVacationRequest,
+          employeeScrolled: true,
+          employeeScrolledAt: new Date().toISOString(),
+        })
+      }
+      
+      // Atualizar a lista de vacationRequests para manter sincronizado
+      setVacationRequests((prev: any[]) => 
+        prev.map((req: any) => 
+          req.id === requestId 
+            ? { ...req, employeeScrolled: true, employeeScrolledAt: new Date().toISOString() }
+            : req
+        )
+      )
+    } catch (error) {
+      console.error('Erro ao marcar scroll:', error)
+    }
+  }
+
+  // Assinar aviso de férias
+  const handleEmployeeSignVacation = async () => {
+    if (!selectedVacationRequest) return
+    
+    if (!vacationSignScrolled) {
+      toast.error('Role até o final do documento para poder assinar')
+      return
+    }
+    
+    setSigningVacation(true)
+    try {
+      const token = localStorage.getItem('token')
+      const api = process.env.NEXT_PUBLIC_API_URL
+      
+      const res = await fetch(`${api}/api/vacation-requests/${selectedVacationRequest.id}/employee-sign`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      
+      if (res.ok) {
+        toast.success('Aviso de férias assinado com sucesso!')
+        setShowVacationSignConfirm(false)
+        setShowVacationSignModal(false)
+        setSelectedVacationRequest(null)
+        fetchVacationData()
+      } else {
+        const error = await res.json()
+        toast.error(error.message || 'Erro ao assinar')
+      }
+    } catch (error) {
+      toast.error('Erro ao assinar aviso de férias')
+    } finally {
+      setSigningVacation(false)
+    }
+  }
+
+  // Helper para formatar data
+  const formatVacationDate = (dateStr: string) => {
+    if (!dateStr) return '-'
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('pt-BR')
+  }
+
+  // Helper para badge de status de solicitação
+  const getVacationRequestStatusBadge = (status: string) => {
+    const badges: Record<string, { bg: string; text: string; label: string }> = {
+      PENDING: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400', label: 'Aguardando análise' },
+      COUNTER_PROPOSAL: { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400', label: 'Contraproposta' },
+      APPROVED: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', label: 'Aprovado' },
+      REJECTED: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400', label: 'Rejeitado' },
+      AWAITING_SIGNATURE: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', label: 'Aguardando assinatura' },
+      EMPLOYEE_SIGNED: { bg: 'bg-indigo-100 dark:bg-indigo-900/30', text: 'text-indigo-700 dark:text-indigo-400', label: 'Você assinou' },
+      COMPLETED: { bg: 'bg-emerald-100 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-400', label: 'Concluído' },
+      CANCELLED: { bg: 'bg-gray-100 dark:bg-gray-900/30', text: 'text-gray-700 dark:text-gray-400', label: 'Cancelado' },
+    }
+    const badge = badges[status] || badges.PENDING
+    return <span className={`px-2 py-1 text-xs rounded-full ${badge.bg} ${badge.text} font-medium`}>{badge.label}</span>
+  }
 
   // Abrir visualização do holerite
   const handleOpenPayslipView = async (payslip: any) => {
@@ -876,6 +1303,109 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
       toast.error('Erro ao assinar holerite')
     } finally {
       setIsSigning(false)
+    }
+  }
+
+  // Aceitar holerite (👍)
+  const handleAcceptPayslip = async () => {
+    if (!selectedPayslip) return
+    
+    if (!hasScrolledToEnd) {
+      toast.error('Role até o final do documento para poder aceitar')
+      return
+    }
+    
+    setIsAccepting(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/payslip/${selectedPayslip.id}/accept`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      
+      if (res.ok) {
+        toast.success('Holerite aceito com sucesso!')
+        setShowSignModal(false)
+        setShowPayslipView(false)
+        setSelectedPayslip(null)
+        setHasScrolledToEnd(false)
+        // Recarregar dados
+        const employeeId = (user as any)?.employee?.id || (user as any)?.funcionario?.id
+        const resPayslips = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/payslips/employee/${employeeId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (resPayslips.ok) {
+          const data = await resPayslips.json()
+          setPayslips(data.payslips || [])
+        }
+      } else {
+        const data = await res.json()
+        toast.error(data.message || 'Erro ao aceitar holerite')
+      }
+    } catch (error) {
+      toast.error('Erro ao aceitar holerite')
+    } finally {
+      setIsAccepting(false)
+    }
+  }
+
+  // Rejeitar holerite (👎)
+  const handleRejectPayslip = async () => {
+    if (!selectedPayslip) return
+    
+    if (!rejectReason.trim()) {
+      toast.error('Informe o motivo da rejeição')
+      return
+    }
+    
+    setIsRejecting(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/payslip/${selectedPayslip.id}/reject`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ reason: rejectReason }),
+        }
+      )
+      
+      if (res.ok) {
+        toast.success('Holerite rejeitado. O RH será notificado.')
+        setShowSignModal(false)
+        setShowRejectForm(false)
+        setRejectReason('')
+        setShowPayslipView(false)
+        setSelectedPayslip(null)
+        setHasScrolledToEnd(false)
+        // Recarregar dados
+        const employeeId = (user as any)?.employee?.id || (user as any)?.funcionario?.id
+        const resPayslips = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payroll/payslips/employee/${employeeId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (resPayslips.ok) {
+          const data = await resPayslips.json()
+          setPayslips(data.payslips || [])
+        }
+      } else {
+        const data = await res.json()
+        toast.error(data.message || 'Erro ao rejeitar holerite')
+      }
+    } catch (error) {
+      toast.error('Erro ao rejeitar holerite')
+    } finally {
+      setIsRejecting(false)
     }
   }
 
@@ -1060,6 +1590,50 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
       unsubscribeFaceDeleted()
     }
   }, [connected, onFaceRegistered, onFaceDeleted, user, checkFaceStatus])
+
+  // WebSocket: Atualizar quando holerite for aceito/rejeitado/pago
+  const { onPayslipAccepted, onPayslipRejected, onPayslipPaid, onPayslipsApproved } = useWebSocket()
+  
+  React.useEffect(() => {
+    if (!connected) return
+
+    const employeeId = (user as any)?.employee?.id || (user as any)?.funcionario?.id
+    if (!employeeId) return
+
+    // Quando holerite é aceito (por este funcionário ou outro)
+    const unsubAccepted = onPayslipAccepted((payslip) => {
+      console.log('[WebSocket] 📥 payslip-accepted:', payslip.id)
+      fetchPayslips() // Recarregar lista de holerites
+    })
+
+    // Quando holerite é rejeitado
+    const unsubRejected = onPayslipRejected((payslip) => {
+      console.log('[WebSocket] 📥 payslip-rejected:', payslip.id)
+      fetchPayslips()
+    })
+
+    // Quando holerite é pago
+    const unsubPaid = onPayslipPaid((payslip) => {
+      console.log('[WebSocket] 📥 payslip-paid:', payslip.id)
+      fetchPayslips()
+    })
+
+    // Quando holerites são aprovados (admin aprovou a folha)
+    const unsubApproved = onPayslipsApproved((data) => {
+      console.log('[WebSocket] 📥 payslips-approved:', data)
+      fetchPayslips() // Recarregar para ver os novos holerites aprovados
+      toast.info('Novos holerites disponíveis!', {
+        description: 'A folha de pagamento foi aprovada'
+      })
+    })
+
+    return () => {
+      unsubAccepted()
+      unsubRejected()
+      unsubPaid()
+      unsubApproved()
+    }
+  }, [connected, onPayslipAccepted, onPayslipRejected, onPayslipPaid, onPayslipsApproved, user, fetchPayslips])
 
   function getCurrentPositionOnce(options?: PositionOptions): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
@@ -1733,44 +2307,126 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                               {/* Previsão do Salário - PRIMEIRO CARD */}
                               {dashboardData?.salaryForecast?.baseSalary > 0 && (
                                 <div className="bg-gradient-to-br from-emerald-500/5 via-cyan-500/5 to-blue-500/5 rounded-xl p-4 border border-emerald-500/20">
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <TrendingUp className="w-4 h-4 text-emerald-500" />
-                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                      Previsão {dashboardData.salaryForecast.hasPayslip ? '(Holerite Gerado)' : 'Estimada'}
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <TrendingUp className="w-4 h-4 text-emerald-500" />
+                                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                        Prévia do Holerite
+                                      </span>
+                                    </div>
+                                    {dashboardData.salaryForecast.daysRemaining > 0 && !dashboardData.salaryForecast.hasPayslip && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {dashboardData.salaryForecast.daysRemaining} dias p/ fechamento
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  {/* PROVENTOS */}
+                                  <div className="mb-2">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase">Proventos</span>
+                                  </div>
+                                  <div className="flex justify-between items-center py-1 text-sm">
+                                    <span className="text-muted-foreground">Salário Base</span>
+                                    <span className="font-medium">{formatCurrency(dashboardData.salaryForecast.baseSalary)}</span>
+                                  </div>
+                                  {(dashboardData.salaryForecast.overtimeValue50 > 0 || dashboardData.salaryForecast.overtimeValue100 > 0) && (
+                                    <div className="flex justify-between items-center py-1 text-sm">
+                                      <span className="text-muted-foreground">Horas Extras</span>
+                                      <span className="font-medium text-green-600">
+                                        +{formatCurrency((dashboardData.salaryForecast.overtimeValue50 || 0) + (dashboardData.salaryForecast.overtimeValue100 || 0))}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center py-1 text-sm border-b border-border/30">
+                                    <span className="font-medium">Total Proventos</span>
+                                    <span className="font-semibold">{formatCurrency(dashboardData.salaryForecast.totalEarnings || dashboardData.salaryForecast.baseSalary)}</span>
+                                  </div>
+                                  
+                                  {/* DESCONTOS */}
+                                  <div className="mt-3 mb-2">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase">Descontos</span>
+                                  </div>
+                                  {dashboardData.salaryForecast.inssValue > 0 && (
+                                    <div className="flex justify-between items-center py-1 text-sm">
+                                      <span className="text-muted-foreground">INSS ({dashboardData.salaryForecast.inssRate?.toFixed(1) || 0}%)</span>
+                                      <span className="font-medium text-red-500">-{formatCurrency(dashboardData.salaryForecast.inssValue)}</span>
+                                    </div>
+                                  )}
+                                  {dashboardData.salaryForecast.irValue > 0 && (
+                                    <div className="flex justify-between items-center py-1 text-sm">
+                                      <span className="text-muted-foreground">IRRF ({dashboardData.salaryForecast.irRate?.toFixed(1) || 0}%)</span>
+                                      <span className="font-medium text-red-500">-{formatCurrency(dashboardData.salaryForecast.irValue)}</span>
+                                    </div>
+                                  )}
+                                  {dashboardData.salaryForecast.transportVoucher > 0 && (
+                                    <div className="flex justify-between items-center py-1 text-sm">
+                                      <span className="text-muted-foreground">Vale Transporte</span>
+                                      <span className="font-medium text-red-500">-{formatCurrency(dashboardData.salaryForecast.transportVoucher)}</span>
+                                    </div>
+                                  )}
+                                  {dashboardData.salaryForecast.healthInsurance > 0 && (
+                                    <div className="flex justify-between items-center py-1 text-sm">
+                                      <span className="text-muted-foreground">Plano de Saúde</span>
+                                      <span className="font-medium text-red-500">-{formatCurrency(dashboardData.salaryForecast.healthInsurance)}</span>
+                                    </div>
+                                  )}
+                                  {dashboardData.salaryForecast.absenceValue > 0 && (
+                                    <div className="my-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-center">
+                                      <div className="text-sm text-muted-foreground">
+                                        Dias não trabalhados ({dashboardData.absences || 0} de 22)
+                                      </div>
+                                      <div className="text-xs text-yellow-600 mb-2">(valor aumenta conforme trabalha)</div>
+                                      <span className="font-semibold text-red-500 text-lg">-{formatCurrency(dashboardData.salaryForecast.absenceValue)}</span>
+                                    </div>
+                                  )}
+                                  {dashboardData.salaryForecast.lateValue > 0 && (
+                                    <div className="flex justify-between items-center py-1 text-sm">
+                                      <span className="text-muted-foreground">
+                                        Atrasos ({dashboardData.lateMinutes || 0}min)
+                                        {!dashboardData.salaryForecast.lateDiscounted && (
+                                          <span className="text-xs text-yellow-600 ml-1">(não descontado)</span>
+                                        )}
+                                      </span>
+                                      <span className={`font-medium ${dashboardData.salaryForecast.lateDiscounted ? 'text-red-500' : 'text-yellow-600'}`}>
+                                        {dashboardData.salaryForecast.lateDiscounted ? '-' : ''}{formatCurrency(dashboardData.salaryForecast.lateValue)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {dashboardData.salaryForecast.advancePayment > 0 && (
+                                    <div className="flex justify-between items-center py-1 text-sm">
+                                      <span className="text-muted-foreground">Adiantamentos</span>
+                                      <span className="font-medium text-red-500">-{formatCurrency(dashboardData.salaryForecast.advancePayment)}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center py-1 text-sm border-b border-border/30">
+                                    <span className="font-medium">Total Descontos</span>
+                                    <span className="font-semibold text-red-500">-{formatCurrency(dashboardData.salaryForecast.totalDeductions || 0)}</span>
+                                  </div>
+                                  
+                                  {/* LÍQUIDO */}
+                                  <div className="flex justify-between items-center pt-3 mt-1">
+                                    <span className="text-sm font-bold">Líquido {dashboardData.salaryForecast.hasPayslip ? '' : 'Estimado'}</span>
+                                    <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                                      {formatCurrency(dashboardData.salaryForecast.netSalary || 0)}
                                     </span>
                                   </div>
                                   
-                                  {/* Salário Base */}
-                                  <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                                    <span className="text-sm text-muted-foreground">Salário Base</span>
-                                    <span className="text-sm font-medium">{formatCurrency(dashboardData.salaryForecast.baseSalary)}</span>
-                                  </div>
-                                  
-                                  {/* Descontos (se houver) */}
-                                  {dashboardData.salaryForecast.currentDeductions > 0 && (
-                                    <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                                      <span className="text-sm text-muted-foreground">
-                                        Descontos
-                                        {dashboardData.salaryForecast.advancesThisMonth > 0 && (
-                                          <span className="text-xs ml-1">(vales: {formatCurrency(dashboardData.salaryForecast.advancesThisMonth)})</span>
-                                        )}
-                                      </span>
-                                      <span className="text-sm font-medium text-red-500">-{formatCurrency(dashboardData.salaryForecast.currentDeductions)}</span>
+                                  {/* FGTS Informativo */}
+                                  {dashboardData.salaryForecast.fgtsValue > 0 && (
+                                    <div className="mt-3 pt-2 border-t border-border/30">
+                                      <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                        <span>FGTS (8% - depósito empresa)</span>
+                                        <span>{formatCurrency(dashboardData.salaryForecast.fgtsValue)}</span>
+                                      </div>
                                     </div>
                                   )}
                                   
-                                  {/* Líquido Previsto */}
-                                  <div className="flex justify-between items-center pt-2 mt-1">
-                                    <span className="text-sm font-semibold">Líquido Previsto</span>
-                                    <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                                      {formatCurrency(dashboardData.salaryForecast.estimatedNet)}
-                                    </span>
-                                  </div>
-                                  
-                                  {/* Data de pagamento */}
-                                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                                    Pagamento previsto: dia {dashboardData.paymentDay || 5} do próximo mês
-                                  </p>
+                                  {/* Aviso de previsão */}
+                                  {!dashboardData.salaryForecast.hasPayslip && (
+                                    <p className="text-xs text-muted-foreground mt-3 text-center italic">
+                                      ⚠️ Valores podem mudar até o fechamento da folha
+                                    </p>
+                                  )}
                                 </div>
                               )}
                               
@@ -1795,14 +2451,14 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                                   <p className="text-xs text-muted-foreground mt-1">trabalhadas</p>
                                 </div>
                                 
-                                {/* Faltas */}
-                                <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 rounded-xl p-4 border border-red-500/20">
+                                {/* Dias não trabalhados */}
+                                <div className="bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 rounded-xl p-4 border border-yellow-500/20">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <UserX className="w-4 h-4 text-red-500" />
-                                    <span className="text-xs text-muted-foreground">Faltas</span>
+                                    <UserX className="w-4 h-4 text-yellow-500" />
+                                    <span className="text-xs text-muted-foreground">A trabalhar</span>
                                   </div>
-                                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{dashboardData?.absences || 0}</p>
-                                  <p className="text-xs text-muted-foreground mt-1">dia(s)</p>
+                                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{dashboardData?.absences || 0}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">dia(s) restantes</p>
                                 </div>
                                 
                                 {/* Atrasos */}
@@ -1817,7 +2473,7 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                               </div>
                               
                               {/* Vale Disponível - só mostra se vales estão habilitados */}
-                              {(payrollConfig?.enableExtraAdvance || payrollConfig?.enableSalaryAdvance) && dashboardData?.availableAdvance > 0 && (
+                              {payrollConfig?.enableExtraAdvance && dashboardData?.availableAdvance > 0 && (
                                 <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 rounded-xl p-4 border border-purple-500/20">
                                   <div className="flex items-center gap-2 mb-2">
                                     <Banknote className="w-4 h-4 text-purple-500" />
@@ -1831,48 +2487,36 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                             
                             {/* ===== MÊS ANTERIOR ===== */}
                             {dashboardData?.lastPayslip && (
-                              <div className="space-y-3 pt-3 border-t border-border/50">
-                                <div className="flex items-center gap-2">
+                              <div className="pt-3 border-t border-border/50">
+                                <div className="flex items-center justify-center gap-2 mb-3">
                                   <FileText className="w-4 h-4 text-muted-foreground" />
                                   <h4 className="text-sm font-semibold text-muted-foreground">
                                     {dashboardData.lastPayslip.monthName} {dashboardData.lastPayslip.year}
                                   </h4>
                                 </div>
                                 
-                                <div className="grid grid-cols-2 gap-3">
-                                  {/* Último Salário */}
-                                  <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-xl p-4 border border-emerald-500/20">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <DollarSign className="w-4 h-4 text-emerald-500" />
-                                      <span className="text-xs text-muted-foreground">Salário Recebido</span>
-                                    </div>
-                                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(dashboardData.lastPayslip.netSalary)}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">líquido</p>
+                                {/* Card único em largura total */}
+                                <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-xl p-4 border border-emerald-500/20 text-center">
+                                  <div className="flex items-center justify-center gap-2 mb-2">
+                                    <DollarSign className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-xs text-muted-foreground">Salário Recebido</span>
                                   </div>
+                                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(dashboardData.lastPayslip.netSalary)}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">líquido</p>
                                   
-                                  {/* Faltas - só mostra se tiver faltas */}
-                                  {dashboardData.lastPayslip.absenceDays > 0 && (
-                                    <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 rounded-xl p-4 border border-red-500/20">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <UserX className="w-4 h-4 text-red-500" />
-                                        <span className="text-xs text-muted-foreground">Faltas</span>
-                                      </div>
-                                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">{dashboardData.lastPayslip.absenceDays}</p>
-                                      <p className="text-xs text-muted-foreground mt-1">dia(s)</p>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Hora Extra - só mostra se tiver horas extras */}
-                                  {dashboardData.lastPayslip.overtimeHours > 0 && (
-                                    <div className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 rounded-xl p-4 border border-orange-500/20">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Clock3 className="w-4 h-4 text-orange-500" />
-                                        <span className="text-xs text-muted-foreground">Hora Extra</span>
-                                      </div>
-                                      <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{dashboardData.lastPayslip.overtimeHours}h</p>
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        {dashboardData.lastPayslip.overtimeValue > 0 ? `+${formatCurrency(dashboardData.lastPayslip.overtimeValue)}` : ''}
-                                      </p>
+                                  {/* Info adicional se houver faltas ou horas extras */}
+                                  {(dashboardData.lastPayslip.absenceDays > 0 || dashboardData.lastPayslip.overtimeHours > 0) && (
+                                    <div className="flex justify-center gap-4 mt-3 pt-3 border-t border-emerald-500/20">
+                                      {dashboardData.lastPayslip.absenceDays > 0 && (
+                                        <div className="text-center">
+                                          <p className="text-sm font-semibold text-red-500">{dashboardData.lastPayslip.absenceDays} falta(s)</p>
+                                        </div>
+                                      )}
+                                      {dashboardData.lastPayslip.overtimeHours > 0 && (
+                                        <div className="text-center">
+                                          <p className="text-sm font-semibold text-orange-500">{dashboardData.lastPayslip.overtimeHours}h extra</p>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -1887,11 +2531,22 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                                 {dashboardData?.pendingPayslips > 0 && (
                                   <button
                                     onClick={() => {
-                                      // Abrir o primeiro holerite pendente
-                                      const firstPending = dashboardData.pendingPayslipsList?.[0]
-                                      if (firstPending) {
-                                        setSelectedPayslip(firstPending)
-                                        setShowPayslipView(true)
+                                      // Se só tem 1 pendente, abre direto
+                                      // Se tem mais de 1, vai para aba de holerites
+                                      if (dashboardData.pendingPayslips === 1) {
+                                        const firstPending = dashboardData.pendingPayslipsList?.[0]
+                                        if (firstPending) {
+                                          setSelectedPayslip(firstPending)
+                                          setShowPayslipView(true)
+                                        }
+                                      } else {
+                                        // Ir para aba de holerites - o componente SlidePanel precisa suportar isso
+                                        // Por enquanto, abre o primeiro e mostra mensagem
+                                        const firstPending = dashboardData.pendingPayslipsList?.[0]
+                                        if (firstPending) {
+                                          setSelectedPayslip(firstPending)
+                                          setShowPayslipView(true)
+                                        }
                                       }
                                     }}
                                     className="w-full flex items-center gap-3 bg-yellow-500/10 rounded-lg p-3 border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors cursor-pointer"
@@ -1941,7 +2596,7 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                     ),
                   },
                   // Tab 2: Vales - só aparece se habilitado
-                  ...((payrollConfig?.enableExtraAdvance || payrollConfig?.enableSalaryAdvance) ? [{
+                  ...(payrollConfig?.enableExtraAdvance ? [{
                     id: 'vales',
                     label: 'Vales',
                     icon: <Wallet className="w-4 h-4" />,
@@ -2087,16 +2742,12 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                             filteredPayslips = filteredPayslips.filter((p: any) => p.referenceMonth === payslipFilterMonth)
                           }
                           
-                          // Se não tem filtro, mostrar apenas o mês anterior (último fechamento)
-                          if (!payslipFilterYear && !payslipFilterMonth && filteredPayslips.length > 0) {
-                            // Ordenar por data (mais recente primeiro)
-                            const sorted = [...filteredPayslips].sort((a, b) => {
-                              if (a.referenceYear !== b.referenceYear) return b.referenceYear - a.referenceYear
-                              return b.referenceMonth - a.referenceMonth
-                            })
-                            // Pegar apenas o mais recente
-                            filteredPayslips = [sorted[0]]
-                          }
+                          // Se não tem filtro, mostrar TODOS os holerites ordenados
+                          // Ordenar por data (mais recente primeiro)
+                          filteredPayslips = [...filteredPayslips].sort((a, b) => {
+                            if (a.referenceYear !== b.referenceYear) return b.referenceYear - a.referenceYear
+                            return b.referenceMonth - a.referenceMonth
+                          })
                           
                           if (filteredPayslips.length === 0) {
                             return (
@@ -2115,11 +2766,18 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                                       {MONTHS[payslip.referenceMonth - 1]} {payslip.referenceYear}
                                     </h4>
                                     <span className={`text-xs px-2 py-1 rounded ${
-                                      payslip.signedAt 
+                                      payslip.status === 'PAID' 
+                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                        : payslip.status === 'ACCEPTED'
                                         ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                        : payslip.status === 'REJECTED'
+                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                                         : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
                                     }`}>
-                                      {payslip.signedAt ? 'Assinado' : 'Pendente'}
+                                      {payslip.status === 'PAID' ? 'Pago' 
+                                        : payslip.status === 'ACCEPTED' ? 'Aceito' 
+                                        : payslip.status === 'REJECTED' ? 'Rejeitado'
+                                        : 'Aguardando Aceite'}
                                     </span>
                                   </div>
                                   
@@ -2133,6 +2791,32 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                                       <p className="font-medium text-red-600">-{formatCurrency(payslip.totalDeductions || 0)}</p>
                                     </div>
                                   </div>
+                                  
+                                  {/* Parcelas de Pagamento */}
+                                  {payslip.installments && payslip.installments.length > 0 && (
+                                    <div className="mb-3 p-2 bg-background rounded border border-border">
+                                      <p className="text-xs text-muted-foreground mb-2">Parcelas de Pagamento</p>
+                                      <div className="space-y-1">
+                                        {payslip.installments.map((inst: any) => (
+                                          <div key={inst.id} className="flex items-center justify-between text-xs">
+                                            <div className="flex items-center gap-2">
+                                              <div className={`w-2 h-2 rounded-full ${inst.paidAt ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                                              <span>Parcela {inst.installmentNumber}/{inst.totalInstallments}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium">{formatCurrency(inst.amount)}</span>
+                                              <span className={inst.paidAt ? 'text-emerald-600' : 'text-muted-foreground'}>
+                                                {inst.paidAt 
+                                                  ? `Pago ${new Date(inst.paidAt).toLocaleDateString('pt-BR')}`
+                                                  : `Vence ${new Date(inst.dueDate).toLocaleDateString('pt-BR')}`
+                                                }
+                                              </span>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                   
                                   <div className="flex items-center justify-between pt-2 border-t border-border">
                                     <div>
@@ -2149,8 +2833,8 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                                         <FileText className="h-4 w-4 mr-1" />
                                         Ver
                                       </Button>
-                                      {/* Botão Download - só se assinado */}
-                                      {payslip.signedAt && (
+                                      {/* Botão Download - só se aceito ou pago */}
+                                      {(payslip.status === 'ACCEPTED' || payslip.status === 'PAID') && (
                                         <Button 
                                           variant="outline" 
                                           size="sm" 
@@ -2160,14 +2844,15 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                                           <Download className="h-4 w-4" />
                                         </Button>
                                       )}
-                                      {/* Botão Assinar - só se não assinado */}
-                                      {!payslip.signedAt && (
+                                      {/* Botão Aceitar - só se APPROVED (aguardando aceite) */}
+                                      {payslip.status === 'APPROVED' && (
                                         <Button
                                           size="sm"
+                                          className="bg-teal-600 hover:bg-teal-700"
                                           onClick={() => handleOpenPayslipView(payslip)}
                                         >
-                                          <Fingerprint className="h-4 w-4 mr-1" />
-                                          Assinar
+                                          <ThumbsUp className="h-4 w-4 mr-1" />
+                                          Aceitar
                                         </Button>
                                       )}
                                     </div>
@@ -2177,6 +2862,303 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                             </div>
                           )
                         })()}
+                      </div>
+                    ),
+                  },
+                  // Tab 3: Férias
+                  {
+                    id: 'ferias',
+                    label: 'Férias',
+                    icon: <Palmtree className="w-4 h-4" />,
+                    content: (
+                      <div className="space-y-4">
+                        {loadingVacations ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                            Carregando...
+                          </div>
+                        ) : (
+                          <>
+                            {/* Períodos Aquisitivos */}
+                            {vacationData?.acquisitivePeriods && vacationData.acquisitivePeriods.length > 0 ? (
+                              <div className="space-y-3">
+                                <h4 className="text-sm font-semibold text-muted-foreground uppercase">Períodos Aquisitivos</h4>
+                                {vacationData.acquisitivePeriods.map((period: any, idx: number) => (
+                                  <div 
+                                    key={idx} 
+                                    className={`rounded-lg p-4 border ${
+                                      period.isExpired 
+                                        ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800' 
+                                        : period.status === 'REGULARIZED'
+                                        ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+                                        : period.status === 'SCHEDULED'
+                                        ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800'
+                                        : 'bg-muted/30 border-border'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-medium">
+                                        {period.periodNumber}º Período
+                                      </span>
+                                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                        period.isExpired 
+                                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                          : period.status === 'REGULARIZED'
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          : period.status === 'SCHEDULED'
+                                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                          : period.isAcquired
+                                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                          : 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
+                                      }`}>
+                                        {period.isExpired ? 'Vencido' 
+                                          : period.status === 'REGULARIZED' ? 'Regularizado'
+                                          : period.status === 'SCHEDULED' ? 'Agendado'
+                                          : period.isAcquired ? 'Disponível'
+                                          : 'Em aquisição'}
+                                      </span>
+                                    </div>
+                                    
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      <p>Aquisição: {formatVacationDate(period.acquisitionStart)} a {formatVacationDate(period.acquisitionEnd)}</p>
+                                      <p>Concessão até: {formatVacationDate(period.concessionEnd)}</p>
+                                      {period.vacation && (
+                                        <p className="text-primary font-medium">
+                                          {period.vacation.remainingDays} dias restantes
+                                          {period.vacation.soldDays > 0 && ` (${period.vacation.soldDays} vendidos)`}
+                                        </p>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Info de férias programadas + botão de assinatura */}
+                                    {period.hasVacation && period.vacation && period.status === 'SCHEDULED' && (
+                                      <div className="mt-3 pt-3 border-t border-border/50">
+                                        {period.vacation.periods && (
+                                          <>
+                                            <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">
+                                              📅 Férias programadas:
+                                            </p>
+                                            {period.vacation.periods.map((p: any, i: number) => (
+                                              <p key={i} className="text-xs text-muted-foreground">
+                                                {formatVacationDate(p.startDate)} a {formatVacationDate(p.endDate)} ({p.days} dias)
+                                              </p>
+                                            ))}
+                                          </>
+                                        )}
+                                        
+                                        {/* Verificar se há solicitação que precisa de assinatura para este período */}
+                                        {(() => {
+                                          const requestForPeriod = vacationRequests.find((req: any) => {
+                                            if (req.vacationId && period.vacation?.id) {
+                                              return req.vacationId === period.vacation.id
+                                            }
+                                            if (req.vacation?.acquisitionStart) {
+                                              return new Date(req.vacation.acquisitionStart).toISOString().split('T')[0] === 
+                                                new Date(period.acquisitionStart).toISOString().split('T')[0]
+                                            }
+                                            return false
+                                          })
+                                          
+                                          const needsSignature = requestForPeriod && 
+                                            (requestForPeriod.status === 'AWAITING_SIGNATURE' || requestForPeriod.status === 'APPROVED')
+                                          
+                                          const alreadySigned = requestForPeriod && requestForPeriod.status === 'EMPLOYEE_SIGNED'
+                                          const isCompleted = requestForPeriod && requestForPeriod.status === 'COMPLETED'
+                                          
+                                          if (needsSignature) {
+                                            return (
+                                              <div className="mt-2">
+                                                <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-2">
+                                                  ✍️ Aguardando sua assinatura
+                                                </p>
+                                                <Button
+                                                  size="sm"
+                                                  onClick={() => openVacationSignModal(requestForPeriod)}
+                                                  className="w-full bg-blue-600 hover:bg-blue-700"
+                                                >
+                                                  <FileSignature className="w-4 h-4 mr-2" />
+                                                  Assinar Aviso de Férias
+                                                </Button>
+                                              </div>
+                                            )
+                                          }
+                                          
+                                          if (alreadySigned) {
+                                            return (
+                                              <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 mt-2">
+                                                📝 Você assinou - aguardando RH finalizar
+                                              </p>
+                                            )
+                                          }
+                                          
+                                          if (isCompleted) {
+                                            return (
+                                              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-2">
+                                                ✅ Férias confirmadas
+                                              </p>
+                                            )
+                                          }
+                                          
+                                          return null
+                                        })()}
+                                      </div>
+                                    )}
+                                    
+                                    {/* Alerta de férias vencidas */}
+                                    {period.isExpired && !period.hasVacation && (
+                                      <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
+                                        <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                                          ⚠️ Período vencido - Procure o RH para regularização
+                                        </p>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Botão Solicitar Férias - aparece em cada card elegível */}
+                                    {(() => {
+                                      // Verificar se já tem solicitação ativa (pendente, em andamento ou concluída) para este período
+                                      // Compara por vacationId OU por acquisitionStart (caso vacation esteja populado)
+                                      const hasActiveRequest = vacationRequests.some((req: any) => {
+                                        // Ignorar apenas REJECTED e CANCELLED - todos os outros status bloqueiam nova solicitação
+                                        if (req.status === 'REJECTED' || req.status === 'CANCELLED') {
+                                          return false
+                                        }
+                                        // Se a solicitação tem vacationId, compara com o id do vacation do período
+                                        if (req.vacationId && period.vacation?.id) {
+                                          return req.vacationId === period.vacation.id
+                                        }
+                                        // Se tem vacation com acquisitionStart, compara as datas
+                                        if (req.vacation?.acquisitionStart) {
+                                          return new Date(req.vacation.acquisitionStart).toISOString().split('T')[0] === 
+                                            new Date(period.acquisitionStart).toISOString().split('T')[0]
+                                        }
+                                        // Se não tem vacation associado, considera como ativa para qualquer período disponível
+                                        // (isso evita múltiplas solicitações sem vacation)
+                                        return !req.vacationId && (period.isAcquired || period.isExpired)
+                                      })
+                                      
+                                      // Verificar se tem solicitação pendente (para mostrar status)
+                                      const hasPendingRequest = vacationRequests.some((req: any) => {
+                                        if (req.status !== 'PENDING' && req.status !== 'COUNTER_PROPOSAL' && req.status !== 'APPROVED' && req.status !== 'AWAITING_SIGNATURE' && req.status !== 'EMPLOYEE_SIGNED') {
+                                          return false
+                                        }
+                                        if (req.vacationId && period.vacation?.id) {
+                                          return req.vacationId === period.vacation.id
+                                        }
+                                        if (req.vacation?.acquisitionStart) {
+                                          return new Date(req.vacation.acquisitionStart).toISOString().split('T')[0] === 
+                                            new Date(period.acquisitionStart).toISOString().split('T')[0]
+                                        }
+                                        return !req.vacationId && (period.isAcquired || period.isExpired)
+                                      })
+                                      
+                                      // Pode solicitar se:
+                                      // - Período está disponível (isAcquired) OU vencido (isExpired)
+                                      // - NÃO está agendado (SCHEDULED)
+                                      // - NÃO está regularizado (REGULARIZED)
+                                      // - NÃO está em aquisição ainda (!isAcquired && !isExpired)
+                                      // - NÃO tem solicitação ativa (pendente, em andamento ou concluída)
+                                      const canRequest = 
+                                        (period.isAcquired || period.isExpired) && 
+                                        period.status !== 'SCHEDULED' && 
+                                        period.status !== 'REGULARIZED' &&
+                                        period.status !== 'COMPLETED' &&
+                                        !hasActiveRequest
+                                      
+                                      if (canRequest) {
+                                        return (
+                                          <div className="mt-3 pt-3 border-t border-border/50">
+                                            <Button
+                                              size="sm"
+                                              onClick={() => {
+                                                // Definir o período selecionado e abrir modal
+                                                console.log('[FÉRIAS CLICK] period:', JSON.stringify({
+                                                  periodNumber: period.periodNumber,
+                                                  acquisitionStart: period.acquisitionStart,
+                                                  vacationId: period.vacation?.id,
+                                                  status: period.status,
+                                                  isExpired: period.isExpired,
+                                                  isAcquired: period.isAcquired,
+                                                }, null, 2))
+                                                setSelectedVacationId(period.vacation?.id || null)
+                                                setSelectedPeriodAcquisitionStart(period.acquisitionStart)
+                                                setVacationRequestDays(period.vacation?.remainingDays || 30)
+                                                setShowVacationRequestModal(true)
+                                              }}
+                                              className="w-full bg-green-600 hover:bg-green-700"
+                                            >
+                                              <Send className="w-4 h-4 mr-2" />
+                                              Solicitar Férias deste Período
+                                            </Button>
+                                          </div>
+                                        )
+                                      }
+                                      
+                                      // Mostrar indicador se já tem solicitação em andamento
+                                      // MAS não mostrar nada se o período já é SCHEDULED (pois já tem tudo no bloco acima)
+                                      if (hasPendingRequest && period.status !== 'SCHEDULED') {
+                                        // Encontrar a solicitação para mostrar o status correto
+                                        const activeRequest = vacationRequests.find((req: any) => {
+                                          if (req.status !== 'PENDING' && req.status !== 'COUNTER_PROPOSAL' && req.status !== 'APPROVED' && req.status !== 'AWAITING_SIGNATURE' && req.status !== 'EMPLOYEE_SIGNED') {
+                                            return false
+                                          }
+                                          if (req.vacationId && period.vacation?.id) {
+                                            return req.vacationId === period.vacation.id
+                                          }
+                                          if (req.vacation?.acquisitionStart) {
+                                            return new Date(req.vacation.acquisitionStart).toISOString().split('T')[0] === 
+                                              new Date(period.acquisitionStart).toISOString().split('T')[0]
+                                          }
+                                          return !req.vacationId && (period.isAcquired || period.isExpired)
+                                        })
+                                        
+                                        const statusMessages: Record<string, { icon: string; text: string; color: string }> = {
+                                          PENDING: { icon: '⏳', text: 'Aguardando análise do RH', color: 'text-yellow-600 dark:text-yellow-400' },
+                                          COUNTER_PROPOSAL: { icon: '📋', text: 'Contraproposta do RH - verifique', color: 'text-orange-600 dark:text-orange-400' },
+                                          APPROVED: { icon: '✅', text: 'Aprovado - aguardando assinatura', color: 'text-green-600 dark:text-green-400' },
+                                          AWAITING_SIGNATURE: { icon: '✍️', text: 'Aguardando sua assinatura', color: 'text-blue-600 dark:text-blue-400' },
+                                          EMPLOYEE_SIGNED: { icon: '📝', text: 'Você assinou - aguardando RH', color: 'text-indigo-600 dark:text-indigo-400' },
+                                        }
+                                        
+                                        const status = activeRequest?.status || 'PENDING'
+                                        const msg = statusMessages[status] || statusMessages.PENDING
+                                        
+                                        // Se precisa de assinatura, mostrar botão
+                                        // MAS não mostrar se o período já é SCHEDULED (pois já tem botão no bloco acima)
+                                        const needsSignature = (status === 'AWAITING_SIGNATURE' || status === 'APPROVED') && period.status !== 'SCHEDULED'
+                                        
+                                        return (
+                                          <div className="mt-3 pt-3 border-t border-border/50">
+                                            <p className={`text-xs font-medium ${msg.color}`}>
+                                              {msg.icon} {msg.text}
+                                            </p>
+                                            {needsSignature && activeRequest && (
+                                              <Button
+                                                size="sm"
+                                                onClick={() => openVacationSignModal(activeRequest)}
+                                                className="w-full mt-2 bg-blue-600 hover:bg-blue-700"
+                                              >
+                                                <FileSignature className="w-4 h-4 mr-2" />
+                                                Assinar Aviso de Férias
+                                              </Button>
+                                            )}
+                                          </div>
+                                        )
+                                      }
+                                      
+                                      return null
+                                    })()}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-center py-8 text-muted-foreground">
+                                <Palmtree className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                                <p>Nenhum período de férias disponível</p>
+                                <p className="text-xs mt-1">Você precisa completar 12 meses de trabalho</p>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     ),
                   },
@@ -2380,11 +3362,25 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                       <span className="font-medium text-red-600">-{formatCurrency(selectedPayslip.extraAdvanceValue)}</span>
                     </div>
                   )}
-                  {/* Faltas - usando absenceValue do backend */}
+                  {/* Faltas / Dias não trabalhados - usando absenceValue do backend */}
                   {Number(selectedPayslip.absenceValue || selectedPayslip.absenceDeduction || 0) > 0 && (
-                    <div className="flex justify-between py-2 border-b border-border/50">
-                      <span>Faltas ({selectedPayslip.absenceDays || 0} dia(s))</span>
-                      <span className="font-medium text-red-600">-{formatCurrency(selectedPayslip.absenceValue || selectedPayslip.absenceDeduction)}</span>
+                    <div className="py-2 border-b border-border/50">
+                      <div className="flex justify-between">
+                        <span>
+                          {/* Mês em andamento = "Dias não trabalhados", Mês fechado = "Faltas" */}
+                          {selectedPayslip.status === 'CALCULATED' || selectedPayslip.status === 'DRAFT' || selectedPayslip.status === 'PENDING'
+                            ? `Dias não trabalhados (${selectedPayslip.absenceDays || 0} de 22)`
+                            : `Faltas (${selectedPayslip.absenceDays || 0} dia(s))`
+                          }
+                        </span>
+                        <span className="font-medium text-red-600">-{formatCurrency(selectedPayslip.absenceValue || selectedPayslip.absenceDeduction)}</span>
+                      </div>
+                      {/* Nota explicativa para mês em andamento */}
+                      {(selectedPayslip.status === 'CALCULATED' || selectedPayslip.status === 'DRAFT' || selectedPayslip.status === 'PENDING') && (
+                        <p className="text-xs text-muted-foreground mt-1 italic">
+                          * Valor diminui conforme você trabalha
+                        </p>
+                      )}
                     </div>
                   )}
                   {/* Atrasos */}
@@ -2466,7 +3462,7 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                 </div>
               )}
               
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 items-center">
                 <Button variant="outline" onClick={() => {
                   setShowPayslipView(false)
                   setSelectedPayslip(null)
@@ -2474,70 +3470,489 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
                 }}>
                   Fechar
                 </Button>
-                {!selectedPayslip.signedAt && (
-                  <Button 
-                    onClick={() => {
-                      if (hasScrolledToEnd) {
-                        setShowSignModal(true)
-                      } else {
-                        toast.error('Role até o final do documento para poder assinar')
-                      }
-                    }}
-                    disabled={!hasScrolledToEnd}
-                    className={!hasScrolledToEnd ? 'opacity-50 cursor-not-allowed' : ''}
-                  >
-                    <Fingerprint className="h-4 w-4 mr-2" />
-                    {hasScrolledToEnd ? 'Assinar Holerite' : 'Role para assinar'}
-                  </Button>
+                
+                {/* Botões 👍/👎 - mostra se holerite NÃO foi pago, aceito nem rejeitado */}
+                {selectedPayslip.status !== 'PAID' && selectedPayslip.status !== 'ACCEPTED' && selectedPayslip.status !== 'REJECTED' && !selectedPayslip.acceptedAt && !selectedPayslip.rejectedAt && (
+                  <>
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        if (hasScrolledToEnd) {
+                          setShowRejectForm(true)
+                          setShowSignModal(true)
+                        } else {
+                          toast.error('Role até o final do documento primeiro')
+                        }
+                      }}
+                      disabled={!hasScrolledToEnd}
+                      className={`${!hasScrolledToEnd ? 'opacity-50 cursor-not-allowed' : ''} border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-950`}
+                    >
+                      <ThumbsDown className="h-4 w-4 mr-2" />
+                      Rejeitar
+                    </Button>
+                    <Button 
+                      onClick={() => {
+                        if (hasScrolledToEnd) {
+                          setShowSignModal(true)
+                        } else {
+                          toast.error('Role até o final do documento primeiro')
+                        }
+                      }}
+                      disabled={!hasScrolledToEnd}
+                      className={`${!hasScrolledToEnd ? 'opacity-50 cursor-not-allowed' : ''} bg-teal-600 hover:bg-teal-700`}
+                    >
+                      <ThumbsUp className="h-4 w-4 mr-2" />
+                      Aceitar
+                    </Button>
+                  </>
                 )}
-                {selectedPayslip.signedAt && (
-                  <Button 
-                    variant="outline"
-                    onClick={() => handleDownloadPdf(selectedPayslip.id, selectedPayslip.referenceMonth, selectedPayslip.referenceYear)}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Baixar PDF
-                  </Button>
+                
+                {/* Status já aceito - mostra badge em vez de botões */}
+                {(selectedPayslip.status === 'ACCEPTED' || selectedPayslip.acceptedAt) && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-teal-500/10 text-teal-600 rounded-lg text-sm font-medium">
+                    <ThumbsUp className="h-4 w-4" />
+                    Aceito
+                  </div>
                 )}
+                
+                {/* Status rejeitado - mostra badge em vez de botões */}
+                {(selectedPayslip.status === 'REJECTED' || selectedPayslip.rejectedAt) && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 text-red-600 rounded-lg text-sm font-medium">
+                    <ThumbsDown className="h-4 w-4" />
+                    Rejeitado
+                  </div>
+                )}
+                
+                {/* Botão download - sempre disponível */}
+                <Button 
+                  variant="outline"
+                  onClick={() => handleDownloadPdf(selectedPayslip.id, selectedPayslip.referenceMonth, selectedPayslip.referenceYear)}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de confirmação de assinatura */}
-      {showSignModal && selectedPayslip && (
+      {/* Modal de confirmação de aceite */}
+      {showSignModal && selectedPayslip && !showRejectForm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
           <div className="bg-card border border-border rounded-lg w-full max-w-md">
             <div className="p-4 border-b border-border">
-              <h2 className="text-lg font-semibold">Confirmar Assinatura</h2>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <ThumbsUp className="h-5 w-5 text-teal-600" />
+                Confirmar Aceite
+              </h2>
             </div>
             
             <div className="p-4 space-y-4">
               <p className="text-sm">
-                Você está prestes a assinar digitalmente o holerite de{' '}
-                <strong>{MONTHS[selectedPayslip.referenceMonth - 1]}/{selectedPayslip.referenceYear}</strong>.
+                Você confirma que revisou o holerite de{' '}
+                <strong>{MONTHS[selectedPayslip.referenceMonth - 1]}/{selectedPayslip.referenceYear}</strong> e que todos os valores estão corretos?
               </p>
               
-              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-                <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+              <div className="bg-teal-500/10 border border-teal-500/20 rounded-lg p-3">
+                <p className="text-sm text-teal-700 dark:text-teal-400 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
                   Você leu todo o documento
                 </p>
               </div>
               
+              {/* Aviso de assinatura digital */}
+              <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-lg p-4">
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-2 mb-2">
+                  ⚠️ ATENÇÃO: ASSINATURA DIGITAL
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-300">
+                  Ao confirmar o aceite, você está <strong>assinando digitalmente</strong> este holerite, 
+                  declarando que revisou e concorda com todos os valores apresentados. 
+                  Esta ação tem <strong>validade jurídica</strong> e será registrada com data, hora e seu identificador.
+                </p>
+              </div>
+              
               <p className="text-xs text-muted-foreground">
-                Ao clicar em "Confirmar Assinatura", você concorda com todos os valores apresentados.
-                Esta ação não pode ser desfeita.
+                Ao aceitar, você concorda com todos os valores apresentados no holerite.
               </p>
             </div>
             
             <div className="p-4 border-t border-border flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowSignModal(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleAcceptPayslip} 
+                disabled={isAccepting}
+                className="bg-teal-600 hover:bg-teal-700"
+              >
+                {isAccepting ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <ThumbsUp className="h-4 w-4 mr-2" />
+                )}
+                Confirmar Aceite
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de rejeição */}
+      {showSignModal && selectedPayslip && showRejectForm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md">
+            <div className="p-4 border-b border-border">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <ThumbsDown className="h-5 w-5 text-red-600" />
+                Rejeitar Holerite
+              </h2>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <p className="text-sm">
+                Informe o motivo da rejeição do holerite de{' '}
+                <strong>{MONTHS[selectedPayslip.referenceMonth - 1]}/{selectedPayslip.referenceYear}</strong>:
+              </p>
+              
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Descreva o que está incorreto no holerite..."
+                className="w-full p-3 border border-border rounded-lg bg-background text-sm min-h-[120px] focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+              
+              <p className="text-xs text-muted-foreground">
+                O RH será notificado e poderá corrigir o holerite.
+              </p>
+            </div>
+            
+            <div className="p-4 border-t border-border flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowRejectForm(false)
+                  setRejectReason('')
+                  setShowSignModal(false)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleRejectPayslip} 
+                disabled={isRejecting || !rejectReason.trim()}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isRejecting ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <ThumbsDown className="h-4 w-4 mr-2" />
+                )}
+                Confirmar Rejeição
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de assinatura de férias */}
+      {showVacationSignModal && selectedVacationRequest && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-border flex items-center justify-between flex-shrink-0">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <FileSignature className="h-5 w-5 text-blue-600" />
+                Assinar Aviso de Férias
+              </h2>
+              <button 
+                onClick={() => {
+                  setShowVacationSignModal(false)
+                  setSelectedVacationRequest(null)
+                }}
+                className="p-1 hover:bg-muted rounded"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div 
+              className="p-4 space-y-4 overflow-y-auto flex-1"
+              onScroll={(e) => {
+                const target = e.target as HTMLDivElement
+                const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 50
+                if (isAtBottom && !vacationSignScrolled && selectedVacationRequest) {
+                  setVacationSignScrolled(true)
+                  // Salvar no backend
+                  handleVacationScroll(selectedVacationRequest.id)
+                }
+              }}
+            >
+              {/* Cabeçalho do documento */}
+              <div className="text-center border-b border-border pb-4">
+                <h3 className="text-lg font-bold uppercase">Aviso de Férias</h3>
+                <p className="text-sm text-muted-foreground">Documento para assinatura digital</p>
+              </div>
+              
+              {/* Dados do funcionário */}
+              <div className="bg-muted/50 rounded-lg p-4">
+                <h4 className="font-semibold mb-2 text-sm uppercase text-muted-foreground">Dados do Funcionário</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Nome:</span>
+                    <p className="font-medium">{user?.name}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Matrícula:</span>
+                    <p className="font-medium">{user?.employee?.registrationId || '-'}</p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Período Aquisitivo */}
+              <div className="bg-blue-500/10 rounded-lg p-4">
+                <h4 className="font-semibold mb-2 text-sm uppercase text-blue-600">Período Aquisitivo</h4>
+                <div className="text-sm">
+                  <p>
+                    <span className="text-muted-foreground">De:</span>{' '}
+                    <strong>{formatVacationDate(selectedVacationRequest.vacation?.acquisitionStart)}</strong>
+                    {' '}a{' '}
+                    <strong>{formatVacationDate(selectedVacationRequest.vacation?.acquisitionEnd)}</strong>
+                  </p>
+                </div>
+              </div>
+              
+              {/* Período de Gozo */}
+              <div className="bg-green-500/10 rounded-lg p-4">
+                <h4 className="font-semibold mb-2 text-sm uppercase text-green-600">Período de Gozo das Férias</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Data de Início:</span>
+                    <p className="font-medium">{formatVacationDate(selectedVacationRequest.requestedStartDate)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Dias de Férias:</span>
+                    <p className="font-medium">{selectedVacationRequest.requestedDays} dias</p>
+                  </div>
+                  {selectedVacationRequest.sellDays > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Abono Pecuniário:</span>
+                      <p className="font-medium">{selectedVacationRequest.sellDays} dias vendidos</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">Data de Retorno:</span>
+                    <p className="font-medium">
+                      {(() => {
+                        const start = new Date(selectedVacationRequest.requestedStartDate)
+                        start.setDate(start.getDate() + selectedVacationRequest.requestedDays)
+                        return start.toLocaleDateString('pt-BR')
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Valores (se disponíveis) */}
+              {(selectedVacationRequest.calculatedValues || (user?.employee as any)?.baseSalary) && (
+                <div className="bg-yellow-500/10 rounded-lg p-4">
+                  <h4 className="font-semibold mb-2 text-sm uppercase text-yellow-600">Valores Estimados</h4>
+                  <div className="space-y-2 text-sm">
+                    {(() => {
+                      const baseSalary = Number((user?.employee as any)?.baseSalary || 0)
+                      const dailyRate = baseSalary / 30
+                      const vacationDays = selectedVacationRequest.requestedDays
+                      const sellDays = selectedVacationRequest.sellDays || 0
+                      
+                      const vacationBase = vacationDays * dailyRate
+                      const vacationBonus = vacationBase / 3 // 1/3 constitucional
+                      const vacationTotal = vacationBase + vacationBonus
+                      
+                      const sellBase = sellDays * dailyRate
+                      const sellBonus = sellBase / 3
+                      const sellTotal = sellBase + sellBonus
+                      
+                      const grandTotal = vacationTotal + sellTotal
+                      
+                      return (
+                        <>
+                          <div className="flex justify-between py-1 border-b border-border/50">
+                            <span>Férias ({vacationDays} dias)</span>
+                            <span className="font-medium">{formatCurrency(vacationBase)}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-border/50">
+                            <span>1/3 Constitucional</span>
+                            <span className="font-medium">{formatCurrency(vacationBonus)}</span>
+                          </div>
+                          {sellDays > 0 && (
+                            <>
+                              <div className="flex justify-between py-1 border-b border-border/50">
+                                <span>Abono Pecuniário ({sellDays} dias)</span>
+                                <span className="font-medium">{formatCurrency(sellBase)}</span>
+                              </div>
+                              <div className="flex justify-between py-1 border-b border-border/50">
+                                <span>1/3 sobre Abono</span>
+                                <span className="font-medium">{formatCurrency(sellBonus)}</span>
+                              </div>
+                            </>
+                          )}
+                          <div className="flex justify-between py-2 bg-green-500/20 px-2 rounded font-semibold mt-2">
+                            <span>Total Bruto</span>
+                            <span className="text-green-600">{formatCurrency(grandTotal)}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            * Valores estimados. O valor líquido será calculado após descontos de INSS e IRRF.
+                          </p>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
+              
+              {/* Observações */}
+              {selectedVacationRequest.employeeNotes && (
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <h4 className="font-semibold mb-2 text-sm uppercase text-muted-foreground">Suas Observações</h4>
+                  <p className="text-sm">{selectedVacationRequest.employeeNotes}</p>
+                </div>
+              )}
+              
+              {/* Termos de assinatura */}
+              <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                <p className="font-medium mb-2">Ao assinar este aviso de férias, você declara que:</p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>Verificou o período de férias aprovado</li>
+                  <li>Concorda com as datas de início e retorno</li>
+                  <li>Está ciente dos valores a receber</li>
+                  <li>Confirma o recebimento deste aviso</li>
+                </ul>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Esta assinatura terá validade legal conforme MP 2.200-2/2001.
+                  Serão registrados: data/hora, IP e dispositivo.
+                </p>
+              </div>
+              
+              {/* Indicador de scroll */}
+              {!vacationSignScrolled && (
+                <div className="text-center py-4 animate-bounce">
+                  <p className="text-sm text-muted-foreground">↓ Role até o final para poder assinar ↓</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer com botões */}
+            <div className="p-4 border-t border-border flex-shrink-0">
+              {/* Barra de progresso de leitura */}
+              {!selectedVacationRequest.employeeSignedAt && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                    <span>Progresso da leitura</span>
+                    <span>{vacationSignScrolled ? '100%' : 'Role até o final'}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-300 ${vacationSignScrolled ? 'bg-green-500 w-full' : 'bg-yellow-500 w-1/2'}`}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowVacationSignModal(false)
+                    setSelectedVacationRequest(null)
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (vacationSignScrolled) {
+                      setShowVacationSignConfirm(true)
+                    } else {
+                      toast.error('Role até o final do documento primeiro')
+                    }
+                  }}
+                  disabled={!vacationSignScrolled}
+                  className={`${!vacationSignScrolled ? 'opacity-50 cursor-not-allowed' : ''} bg-blue-600 hover:bg-blue-700`}
+                >
+                  <FileSignature className="h-4 w-4 mr-2" />
+                  Assinar Digitalmente
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmação de assinatura de férias */}
+      {showVacationSignConfirm && selectedVacationRequest && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md">
+            <div className="p-4 border-b border-border">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <FileSignature className="h-5 w-5 text-blue-600" />
+                Confirmar Assinatura Digital
+              </h2>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-2">
+                  ⚠️ Atenção: Assinatura com Validade Legal
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Você está prestes a assinar digitalmente o aviso de férias do período de{' '}
+                  <strong>{formatVacationDate(selectedVacationRequest.requestedStartDate)}</strong> a{' '}
+                  <strong>
+                    {(() => {
+                      const start = new Date(selectedVacationRequest.requestedStartDate)
+                      start.setDate(start.getDate() + selectedVacationRequest.requestedDays - 1)
+                      return start.toLocaleDateString('pt-BR')
+                    })()}
+                  </strong>.
+                </p>
+              </div>
+              
+              <div className="text-sm space-y-2">
+                <p className="font-medium">Ao confirmar, você declara que:</p>
+                <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                  <li>Leu e compreendeu todos os termos do aviso</li>
+                  <li>Concorda com o período de férias aprovado</li>
+                  <li>Está ciente dos valores a receber</li>
+                  <li>Autoriza o registro desta assinatura digital</li>
+                </ul>
+              </div>
+              
+              <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground">
+                <p>
+                  Esta assinatura terá validade legal conforme MP 2.200-2/2001 e Lei 14.063/2020.
+                  Serão registrados: data/hora ({new Date().toLocaleString('pt-BR')}), endereço IP e identificação do dispositivo.
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-border flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowVacationSignConfirm(false)}
+              >
                 Voltar
               </Button>
-              <Button onClick={handleSignPayslip} disabled={isSigning}>
-                {isSigning ? 'Assinando...' : 'Confirmar Assinatura'}
+              <Button 
+                onClick={handleEmployeeSignVacation}
+                disabled={signingVacation}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {signingVacation ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileSignature className="h-4 w-4 mr-2" />
+                )}
+                Confirmar Assinatura
               </Button>
             </div>
           </div>
@@ -2596,6 +4011,178 @@ export default function EmployeeCompanyPage({ params }: { params: { company: str
               </Button>
               <Button onClick={handleRequestAdvance} disabled={isRequesting}>
                 {isRequesting ? 'Enviando...' : 'Solicitar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Solicitação de Férias */}
+      {showVacationRequestModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-border flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Palmtree className="w-5 h-5 text-green-600" />
+                <h2 className="text-lg font-semibold">Solicitar Férias</h2>
+              </div>
+              <button
+                onClick={() => setShowVacationRequestModal(false)}
+                className="p-2 hover:bg-muted rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
+              {/* Período disponível */}
+              {canRequestVacation?.availablePeriods?.length > 0 && (
+                <div className="bg-muted/30 p-3 rounded-lg">
+                  <p className="text-xs text-muted-foreground mb-1">Período selecionado:</p>
+                  <p className="text-sm font-medium">
+                    {canRequestVacation.availablePeriods[0].remainingDays} dias disponíveis
+                  </p>
+                </div>
+              )}
+              
+              {/* Data de início */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Data de início *</label>
+                <input
+                  type="date"
+                  value={vacationRequestStartDate}
+                  onChange={(e) => setVacationRequestStartDate(e.target.value)}
+                  min={(() => {
+                    // Data mínima: 5 dias a partir de hoje
+                    const minDate = new Date()
+                    minDate.setDate(minDate.getDate() + 5)
+                    return minDate.toISOString().split('T')[0]
+                  })()}
+                  className="w-full px-3 py-2 border border-border rounded-md bg-background"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Mínimo 5 dias de antecedência
+                </p>
+              </div>
+              
+              {/* Dias de gozo */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Dias de gozo</label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVacationRequestDays(Math.max(14, vacationRequestDays - 1))}
+                    disabled={vacationRequestDays <= 14}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <span className="w-16 text-center font-medium">{vacationRequestDays - vacationSellDays} dias</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVacationRequestDays(Math.min(30, vacationRequestDays + 1))}
+                    disabled={vacationRequestDays >= 30}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Vender dias (abono pecuniário) */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Vender dias (abono pecuniário)</label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVacationSellDays(Math.max(0, vacationSellDays - 1))}
+                    disabled={vacationSellDays <= 0}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <span className="w-16 text-center font-medium">{vacationSellDays} dias</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVacationSellDays(Math.min(10, vacationSellDays + 1))}
+                    disabled={vacationSellDays >= 10}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Máximo 10 dias (1/3 das férias)</p>
+              </div>
+              
+              {/* Observações */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Observações (opcional)</label>
+                <textarea
+                  value={vacationNotes}
+                  onChange={(e) => setVacationNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-md bg-background resize-none"
+                  rows={2}
+                  placeholder="Ex: Viagem em família"
+                />
+              </div>
+              
+              {/* Lista de solicitações rejeitadas anteriormente */}
+              {(() => {
+                const rejectedRequests = vacationRequests.filter((req: any) => req.status === 'REJECTED')
+                if (rejectedRequests.length > 0) {
+                  return (
+                    <div className="mt-2 pt-3 border-t border-border">
+                      <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-2">
+                        ❌ Solicitações rejeitadas anteriormente:
+                      </p>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {rejectedRequests.map((req: any) => (
+                          <div key={req.id} className="bg-red-50 dark:bg-red-950/30 p-2 rounded text-xs">
+                            <p className="text-muted-foreground">
+                              {formatVacationDate(req.requestedStartDate)} - {req.requestedDays} dias
+                            </p>
+                            {req.rejectionReason && (
+                              <p className="text-red-600 dark:text-red-400 mt-1">
+                                <strong>Motivo:</strong> {req.rejectionReason}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+            </div>
+            
+            <div className="p-4 border-t border-border flex justify-end gap-2 flex-shrink-0">
+              <Button variant="outline" onClick={() => {
+                setShowVacationRequestModal(false)
+                setVacationRequestStartDate('')
+                setVacationRequestDays(30)
+                setVacationSellDays(0)
+                setVacationNotes('')
+                setSelectedPeriodAcquisitionStart(null)
+              }}>
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleSubmitVacationRequest} 
+                disabled={submittingVacationRequest || !vacationRequestStartDate}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {submittingVacationRequest ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Solicitar
+                  </>
+                )}
               </Button>
             </div>
           </div>

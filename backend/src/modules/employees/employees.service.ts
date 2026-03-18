@@ -120,6 +120,99 @@ export class EmployeesService {
     }
   }
 
+  // Buscar funcionário por ID
+  // - Retorna dados completos para edição
+  async getEmployeeById(employeeId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            cpf: true,
+            phone: true,
+            avatarUrl: true,
+          },
+        },
+        position: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        geofence: {
+          select: {
+            id: true,
+            name: true,
+            radiusMeters: true,
+          },
+        },
+      },
+    })
+
+    if (!employee) {
+      return null
+    }
+
+    return {
+      id: employee.id,
+      registrationId: employee.registrationId,
+      hireDate: employee.hireDate,
+      baseSalary: employee.baseSalary,
+      positionId: employee.positionId,
+      departmentId: employee.departmentId,
+      geofenceId: employee.geofenceId,
+      workStartTime: employee.workStartTime,
+      workEndTime: employee.workEndTime,
+      breakStartTime: employee.breakStartTime,
+      breakEndTime: employee.breakEndTime,
+      allowRemoteClockIn: employee.allowRemoteClockIn,
+      allowFacialRecognition: employee.allowFacialRecognition,
+      faceRegistered: employee.faceRegistered || false,
+      faceId: employee.faceId || null,
+      requireLiveness: employee.requireLiveness,
+      allowOvertime: employee.allowOvertime,
+      allowOvertimeBefore: employee.allowOvertimeBefore,
+      maxOvertimeBefore: employee.maxOvertimeBefore,
+      allowOvertimeAfter: employee.allowOvertimeAfter,
+      maxOvertimeAfter: employee.maxOvertimeAfter,
+      allowTimeBank: employee.allowTimeBank,
+      minRestHours: employee.minRestHours,
+      warnOnRestViolation: employee.warnOnRestViolation,
+      workSchedule: employee.workSchedule,
+      customWorkDaysPerMonth: employee.customWorkDaysPerMonth,
+      useCustomBenefits: employee.useCustomBenefits,
+      transportVoucherEnabled: employee.transportVoucherEnabled,
+      transportVoucherRate: employee.transportVoucherRate,
+      mealVoucherEnabled: employee.mealVoucherEnabled,
+      mealVoucherValue: employee.mealVoucherValue,
+      mealVoucherDiscount: employee.mealVoucherDiscount,
+      healthInsuranceEnabled: employee.healthInsuranceEnabled,
+      healthInsuranceValue: employee.healthInsuranceValue,
+      dentalInsuranceEnabled: employee.dentalInsuranceEnabled,
+      dentalInsuranceValue: employee.dentalInsuranceValue,
+      customPaymentDay1: employee.customPaymentDay1,
+      customPaymentDay2: employee.customPaymentDay2,
+      customPaymentDay3: employee.customPaymentDay3,
+      customPaymentDay4: employee.customPaymentDay4,
+      active: employee.active,
+      status: employee.active ? 'ACTIVE' : 'INACTIVE',
+      companyId: employee.companyId,
+      user: employee.user,
+      position: employee.position,
+      department: employee.department,
+      geofence: employee.geofence,
+    }
+  }
+
   // Listar funcionários (opcional: por empresa)
   // - Retorna array com JOIN de User para trazer email e avatarUrl
   async listEmployees(companyId?: string) {
@@ -145,8 +238,6 @@ export class EmployeesService {
           faceRegistered: true,
           faceId: true,
           requireLiveness: true,
-          requireGeolocation: true,
-          minGeoAccuracyMeters: true,
           active: true,
           companyId: true,
           // Comentário: JOIN com User para trazer nome, email, cpf, phone e avatarUrl
@@ -203,8 +294,6 @@ export class EmployeesService {
         faceRegistered: emp.faceRegistered || false,
         faceId: emp.faceId || null,
         requireLiveness: emp.requireLiveness,
-        requireGeolocation: emp.requireGeolocation,
-        minGeoAccuracyMeters: emp.minGeoAccuracyMeters,
         active: emp.active,
         status: emp.active ? 'ACTIVE' : 'INACTIVE',
         // Dados do User
@@ -284,6 +373,32 @@ export class EmployeesService {
         // Converter status para active (ACTIVE = true, INACTIVE/TERMINATED = false)
         employeeData.active = body.status === 'ACTIVE'
       }
+      
+      // Hora extra
+      if (typeof body.allowOvertime === 'boolean') employeeData.allowOvertime = body.allowOvertime
+      if (typeof body.allowOvertimeBefore === 'boolean') employeeData.allowOvertimeBefore = body.allowOvertimeBefore
+      if (body.maxOvertimeBefore !== undefined) employeeData.maxOvertimeBefore = body.maxOvertimeBefore
+      if (typeof body.allowOvertimeAfter === 'boolean') employeeData.allowOvertimeAfter = body.allowOvertimeAfter
+      if (body.maxOvertimeAfter !== undefined) employeeData.maxOvertimeAfter = body.maxOvertimeAfter
+      if (typeof body.allowTimeBank === 'boolean') employeeData.allowTimeBank = body.allowTimeBank
+      if (body.minRestHours !== undefined) employeeData.minRestHours = body.minRestHours
+      if (typeof body.warnOnRestViolation === 'boolean') employeeData.warnOnRestViolation = body.warnOnRestViolation
+      
+      // Escala de trabalho
+      if (body.workSchedule) employeeData.workSchedule = body.workSchedule
+      if (body.customWorkDaysPerMonth !== undefined) employeeData.customWorkDaysPerMonth = body.customWorkDaysPerMonth
+      
+      // Benefícios individuais
+      if (typeof body.useCustomBenefits === 'boolean') employeeData.useCustomBenefits = body.useCustomBenefits
+      if (body.transportVoucherEnabled !== undefined) employeeData.transportVoucherEnabled = body.transportVoucherEnabled
+      if (body.transportVoucherRate !== undefined) employeeData.transportVoucherRate = body.transportVoucherRate
+      if (body.mealVoucherEnabled !== undefined) employeeData.mealVoucherEnabled = body.mealVoucherEnabled
+      if (body.mealVoucherValue !== undefined) employeeData.mealVoucherValue = body.mealVoucherValue
+      if (body.mealVoucherDiscount !== undefined) employeeData.mealVoucherDiscount = body.mealVoucherDiscount
+      if (body.healthInsuranceEnabled !== undefined) employeeData.healthInsuranceEnabled = body.healthInsuranceEnabled
+      if (body.healthInsuranceValue !== undefined) employeeData.healthInsuranceValue = body.healthInsuranceValue
+      if (body.dentalInsuranceEnabled !== undefined) employeeData.dentalInsuranceEnabled = body.dentalInsuranceEnabled
+      if (body.dentalInsuranceValue !== undefined) employeeData.dentalInsuranceValue = body.dentalInsuranceValue
 
       const updatedEmployee = await tx.employee.update({
         where: { id },

@@ -22,17 +22,14 @@ model Company {
   latitude                 Float?
   longitude                Float?
   allowRemoteClockIn       Boolean         @default(false)
-  requireGeolocation       Boolean         @default(false)
-  minGeoAccuracyMeters     Int?
   geofencingEnabled        Boolean         @default(false)
   geofencePolicy           GeofencePolicy?
   requireFacialRecognition Boolean         @default(false)
   requireLiveness          Boolean         @default(false)
   workingHoursStart        String          @default("08:00")
   workingHoursEnd          String          @default("18:00")
+  workRegime               WorkRegime      @default(SINGLE_SHIFT)
   timezone                    String?
-  toleranceEntryAfterMin      Int?
-  toleranceExitAfterMin       Int?
   enableTolerances            Boolean         @default(true)
   earlyEntryToleranceMinutes  Int             @default(10)
   lateExitToleranceMinutes    Int             @default(15)
@@ -50,6 +47,24 @@ model Company {
   warnOnViolation          Boolean         @default(true)
   dashboardShowRecentEntries Boolean       @default(true)
   dashboardRecentEntriesLimit Int          @default(10)
+  
+  // Configurações de validação CLT para Férias (modo CUSTOM)
+  vacationValidateAcquisitive   Boolean     @default(true)  // Validar período aquisitivo (12 meses)
+  vacationValidateConcessivo    Boolean     @default(true)  // Validar período concessivo (vencimento)
+  vacationValidateMaxPeriods    Boolean     @default(true)  // Validar máximo 3 períodos
+  vacationValidateMinDays       Boolean     @default(true)  // Validar período mínimo 14 dias
+  vacationValidateMaxSellDays   Boolean     @default(true)  // Validar máximo 10 dias vendidos
+  vacationValidateStartDate     Boolean     @default(true)  // Validar início antes de feriado/fim de semana
+  vacationValidatePaymentDeadline Boolean   @default(true)  // Validar prazo pagamento (2 dias antes)
+  vacationEnforceDoublePayment  Boolean     @default(true)  // Obrigar pagamento em dobro se vencido
+  
+  // Configurações de visibilidade dos cards do Dashboard
+  dashboardShowTotalEmployees Boolean      @default(true)
+  dashboardShowTodayEntries   Boolean      @default(true)
+  dashboardShowFacialRecognition Boolean   @default(true)
+  dashboardShowRemoteClock    Boolean      @default(true)
+  dashboardShowOvertime       Boolean      @default(true)
+  dashboardShowAlerts         Boolean      @default(true)
   // Configurações do aplicativo
   successMessageDuration   Int             @default(10) // Tempo em segundos da mensagem de sucesso no terminal
   createdAt                DateTime        @default(now())
@@ -74,6 +89,10 @@ model Company {
   advances                 Advance[]
   rolePermissions          RolePermission[]
   auditLogs                AuditLog[]
+  holidays                 Holiday[]
+  medicalCertificates      MedicalCertificate[]
+  vacations                Vacation[]
+  vacationRequests         VacationRequest[]
 
   @@map("companies")
 }
@@ -92,10 +111,11 @@ model User {
   employeeId   String?   @unique @db.Uuid
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  sentMessages Message[]
-  auditLogs    AuditLog[]
-  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  sentMessages      Message[]
+  auditLogs         AuditLog[]
+  approvedVacations Vacation[]
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee          Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("users")
 }
@@ -113,8 +133,6 @@ model Employee {
   allowRemoteClockIn     Boolean         @default(false) // Permite bater ponto pelo painel (com geolocalização/cerca)
   allowFacialRecognition Boolean         @default(false)
   requireLiveness        Boolean         @default(false)
-  requireGeolocation     Boolean         @default(false) // @deprecated - usar geofenceId ao invés
-  minGeoAccuracyMeters   Int? // @deprecated - precisão está na cerca (geofence.radiusMeters)
   timezone               String?
   active                 Boolean         @default(true)
   workStartTime          String          @default("08:00")
@@ -133,6 +151,30 @@ model Employee {
   allowTimeBank          Boolean         @default(false) // Usa banco de horas (compensa em folga)
   minRestHours           Int             @default(11)    // Mínimo de descanso entre jornadas
   warnOnRestViolation    Boolean         @default(true)  // Alertar se violar descanso
+  
+  // Escala de trabalho
+  workSchedule           WorkSchedule    @default(FIVE_TWO) // Escala (5x2, 6x1, 12x36, etc.)
+  customWorkDaysPerMonth Int?                               // Dias/mês se escala CUSTOM
+  
+  // Benefícios individuais (sobrescreve config da empresa se preenchido)
+  useCustomBenefits         Boolean   @default(false)           // Usa config individual?
+  transportVoucherEnabled   Boolean?                            // VT habilitado (null = usa empresa)
+  transportVoucherRate      Decimal?  @db.Decimal(5, 2)         // % desconto VT
+  mealVoucherEnabled        Boolean?                            // VR habilitado
+  mealVoucherValue          Decimal?  @db.Decimal(10, 2)        // Valor VR que recebe
+  mealVoucherDiscount       Decimal?  @db.Decimal(5, 2)         // % desconto VR
+  healthInsuranceEnabled    Boolean?                            // Plano saúde habilitado
+  healthInsuranceValue      Decimal?  @db.Decimal(10, 2)        // Valor desconto plano saúde
+  dentalInsuranceEnabled    Boolean?                            // Plano odonto habilitado
+  dentalInsuranceValue      Decimal?  @db.Decimal(10, 2)        // Valor desconto plano odonto
+  
+  // Datas de pagamento personalizadas (sobrescreve config da empresa se preenchido)
+  // As porcentagens sempre vêm da configuração global da empresa
+  customPaymentDay1         Int?                                // Data personalizada parcela 1
+  customPaymentDay2         Int?                                // Data personalizada parcela 2
+  customPaymentDay3         Int?                                // Data personalizada parcela 3
+  customPaymentDay4         Int?                                // Data personalizada parcela 4
+  
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
   geofenceId             String?         @db.Uuid
@@ -153,6 +195,9 @@ model Employee {
   paymentGroupId         String?         @db.Uuid
   paymentGroup           PaymentGroup?   @relation(fields: [paymentGroupId], references: [id], onDelete: SetNull)
   user                   User?
+  medicalCertificates    MedicalCertificate[]
+  vacations              Vacation[]
+  vacationRequests       VacationRequest[]
 
   @@unique([companyId, registrationId])
   @@map("employees")
@@ -437,6 +482,7 @@ enum NotificationType {
   SYSTEM
   PAYMENT
   SECURITY
+  VACATION
 }
 
 enum GeofencePolicy {
@@ -544,10 +590,12 @@ model Payslip {
   totalEarnings       Decimal       @default(0) @db.Decimal(12, 2) // Total proventos
   
   // Descontos (deductions)
-  absenceDays         Int           @default(0)  // Dias de falta
+  absenceDays         Int           @default(0)  // Dias de falta (não justificados)
   absenceValue        Decimal       @default(0) @db.Decimal(10, 2)
+  justifiedAbsenceDays Int          @default(0)  // Dias justificados por atestado
   lateMinutes         Int           @default(0)  // Minutos de atraso
-  lateValue           Decimal       @default(0) @db.Decimal(10, 2)
+  lateValue           Decimal       @default(0) @db.Decimal(10, 2) // Valor do atraso (sempre calculado para análise)
+  lateDiscounted      Boolean       @default(true) // Se true, lateValue foi descontado; se false, apenas registrado
   inssBase            Decimal       @default(0) @db.Decimal(10, 2) // Base INSS
   inssValue           Decimal       @default(0) @db.Decimal(10, 2) // Desconto INSS
   inssRate            Decimal       @default(0) @db.Decimal(5, 2)  // Alíquota INSS
@@ -575,8 +623,11 @@ model Payslip {
   
   // Controle
   calculatedAt        DateTime?                                     // Quando foi calculado
-  approvedAt          DateTime?                                     // Quando foi aprovado
-  approvedBy          String?       @db.Uuid                        // Quem aprovou
+  approvedAt          DateTime?                                     // Quando foi aprovado pelo admin
+  approvedBy          String?       @db.Uuid                        // Quem aprovou (admin)
+  acceptedAt          DateTime?                                     // Quando foi aceito pelo funcionário
+  rejectedAt          DateTime?                                     // Quando foi rejeitado pelo funcionário
+  rejectionReason     String?                                       // Motivo da rejeição pelo funcionário
   paidAt              DateTime?                                     // Quando foi pago
   notes               String?                                       // Observações
   
@@ -603,11 +654,35 @@ model Payslip {
   payroll             Payroll       @relation(fields: [payrollId], references: [id], onDelete: Cascade)
   customBenefits      PayslipBenefit[]
   discountedAdvances  Advance[]                                     // Adiantamentos descontados
+  installments        PayslipInstallment[]                          // Parcelas de pagamento
 
   @@unique([payrollId, employeeId])
   @@index([companyId, referenceYear, referenceMonth])
   @@index([employeeId, referenceYear, referenceMonth])
   @@map("payslips")
+}
+
+// Parcelas de pagamento do holerite
+model PayslipInstallment {
+  id                  String    @id @default(uuid()) @db.Uuid
+  payslipId           String    @db.Uuid
+  installmentNumber   Int                                           // Número da parcela (1, 2, 3, 4)
+  totalInstallments   Int                                           // Total de parcelas
+  percentage          Decimal   @db.Decimal(5, 2)                   // % desta parcela
+  amount              Decimal   @db.Decimal(12, 2)                  // Valor calculado
+  dueDate             DateTime  @db.Date                            // Data prevista de pagamento
+  paidAt              DateTime?                                     // Quando foi pago
+  paidBy              String?   @db.Uuid                            // Quem pagou
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  payslip             Payslip   @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  
+  @@unique([payslipId, installmentNumber])
+  @@index([payslipId])
+  @@index([dueDate])
+  @@map("payslip_installments")
 }
 
 // Status da folha de pagamento
@@ -624,9 +699,62 @@ enum PayrollStatus {
 enum PayslipStatus {
   PENDING     // Pendente de cálculo
   CALCULATED  // Calculado
-  APPROVED    // Aprovado
+  APPROVED    // Aprovado pelo admin
+  ACCEPTED    // Aceito pelo funcionário (👍)
+  REJECTED    // Rejeitado pelo funcionário (👎)
   PAID        // Pago
   CANCELLED   // Cancelado
+}
+
+// Modo de pagamento da empresa
+enum PaymentMode {
+  FULL          // Mensal - pagamento único (100% de uma vez)
+  ADVANCE       // Adiantamento - vale + saldo (ex: 40% dia 15 + 60% dia 5)
+  INSTALLMENTS  // Parcelado - divide em 2 ou 4 parcelas iguais ou personalizadas
+}
+
+// ==========================================
+// ATESTADOS MÉDICOS
+// ==========================================
+
+// Atestado médico do funcionário
+model MedicalCertificate {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @db.Uuid
+  employeeId      String    @db.Uuid
+  
+  startDate       DateTime  @db.Date                    // Data início do atestado
+  endDate         DateTime  @db.Date                    // Data fim do atestado
+  days            Int                                   // Quantidade de dias
+  reason          String?                               // Motivo/CID (opcional)
+  doctorName      String?                               // Nome do médico
+  doctorCrm       String?                               // CRM do médico
+  attachmentUrl   String?                               // URL do arquivo anexo
+  notes           String?                               // Observações
+  
+  status          MedicalCertificateStatus @default(PENDING)
+  approvedAt      DateTime?
+  approvedBy      String?   @db.Uuid
+  rejectedAt      DateTime?
+  rejectedBy      String?   @db.Uuid
+  rejectionReason String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId, employeeId])
+  @@index([startDate, endDate])
+  @@map("medical_certificates")
+}
+
+// Status do atestado médico
+enum MedicalCertificateStatus {
+  PENDING   // Aguardando aprovação
+  APPROVED  // Aprovado
+  REJECTED  // Rejeitado
 }
 
 // ==========================================
@@ -638,50 +766,73 @@ model PayrollConfig {
   id                    String        @id @default(uuid()) @db.Uuid
   companyId             String        @unique @db.Uuid
   
-  // Tipo de pagamento
-  paymentFrequency      PaymentFrequency @default(MONTHLY) // Mensal, Quinzenal, Semanal
-  paymentDay1           Int           @default(5)          // Primeiro dia de pagamento
-  paymentDay2           Int?                               // Segundo dia (se quinzenal)
-  paymentDayOfWeek      Int?                               // Dia da semana (0=Dom, 1=Seg... 6=Sáb) se semanal
-  
   // Encargos obrigatórios (ativar/desativar)
   enableInss            Boolean       @default(true)       // Desconta INSS do funcionário
   enableIrrf            Boolean       @default(true)       // Desconta IRRF do funcionário
   enableFgts            Boolean       @default(true)       // Empresa paga FGTS (8%)
   
-  // Adicional Noturno (22h às 05h = +20%)
-  enableNightShift      Boolean       @default(true)       // Habilitar adicional noturno
+  // Desconto de atrasos
+  enableLateDiscount    Boolean       @default(true)       // Desconta atrasos do funcionário (padrão: SIM)
+                                                           // Se false: NÃO desconta, mas registra para análise
+  
+  // Adicional Noturno (22h às 05h = +20%) - DESABILITADO por padrão
+  enableNightShift      Boolean       @default(false)      // Habilitar adicional noturno
   nightShiftStart       String        @default("22:00")    // Início do horário noturno
   nightShiftEnd         String        @default("05:00")    // Fim do horário noturno
   nightShiftPercentage  Decimal       @default(20) @db.Decimal(5, 2) // % adicional noturno
-  
-  // Adiantamento Salarial (Vale Fixo - % automático)
-  enableSalaryAdvance   Boolean       @default(false)      // Habilitar adiantamento salarial
-  salaryAdvanceDay      Int?                               // Dia do adiantamento
-  salaryAdvancePercentage Decimal?    @db.Decimal(5, 2)    // % do salário (ex: 40)
   
   // Vale Avulso (Sob Demanda - valor fixo)
   enableExtraAdvance    Boolean       @default(false)      // Habilitar vale avulso
   maxExtraAdvancePercentage Decimal?  @db.Decimal(5, 2)    // Limite máximo % do salário (ex: 50)
   
-  // Benefícios padrão (ativar/desativar)
-  enableTransportVoucher Boolean      @default(true)       // Vale-transporte (6%)
-  transportVoucherRate  Decimal       @default(6) @db.Decimal(5, 2) // % desconto VT
-  enableMealVoucher     Boolean       @default(false)      // Vale-refeição
-  mealVoucherValue      Decimal       @default(0) @db.Decimal(10, 2) // Valor VR
-  mealVoucherDiscount   Decimal       @default(0) @db.Decimal(5, 2)  // % desconto VR
-  enableHealthInsurance Boolean       @default(false)      // Plano de saúde
-  healthInsuranceValue  Decimal       @default(0) @db.Decimal(10, 2) // Valor plano
-  enableDentalInsurance Boolean       @default(false)      // Plano odontológico
-  dentalInsuranceValue  Decimal       @default(0) @db.Decimal(10, 2) // Valor plano
+  // Benefícios padrão da empresa (valores default para funcionários)
+  enableTransportVoucher Boolean      @default(true)       // Vale-transporte habilitado
+  transportVoucherRate  Decimal       @default(6) @db.Decimal(5, 2) // % desconto VT (padrão 6%)
+  enableMealVoucher     Boolean       @default(false)      // Vale-refeição habilitado
+  mealVoucherValue      Decimal       @default(0) @db.Decimal(10, 2) // Valor VR que funcionário recebe
+  mealVoucherDiscount   Decimal       @default(0) @db.Decimal(5, 2)  // % desconto VR do salário
+  enableHealthInsurance Boolean       @default(false)      // Plano de saúde habilitado
+  healthInsuranceValue  Decimal       @default(0) @db.Decimal(10, 2) // Valor desconto plano saúde
+  enableDentalInsurance Boolean       @default(false)      // Plano odontológico habilitado
+  dentalInsuranceValue  Decimal       @default(0) @db.Decimal(10, 2) // Valor desconto plano odonto
   
   // 13º e Férias
   enable13thSalary      Boolean       @default(true)       // Paga 13º salário
   enableVacationBonus   Boolean       @default(true)       // Paga 1/3 de férias
   
-  // Configurações de cálculo (padrão/fallback)
-  workDaysPerMonth      Int           @default(22)         // Dias úteis por mês (padrão)
-  workHoursPerDay       Decimal       @default(8) @db.Decimal(4, 2) // Horas por dia (padrão)
+  // ==========================================
+  // MODO DE PAGAMENTO FLEXÍVEL
+  // ==========================================
+  
+  // Modo de pagamento (padrão: FULL = mensal, uma vez no dia 5)
+  paymentMode           PaymentMode   @default(FULL)
+  
+  // Configuração FULL (Mensal - pagamento único)
+  fullPaymentDay        Int           @default(5)          // Dia do pagamento único
+  
+  // Configuração ADVANCE (Adiantamento - vale + saldo)
+  advancePercent        Decimal       @default(40) @db.Decimal(5, 2)  // % do adiantamento (padrão 40%)
+  advancePaymentDay     Int           @default(15)         // Dia do adiantamento
+  balancePaymentDay     Int           @default(5)          // Dia do saldo (mês seguinte)
+  
+  // Configuração INSTALLMENTS (Parcelado - 2 ou 4 parcelas)
+  installmentCount      Int           @default(2)          // Quantidade de parcelas (2 ou 4)
+  
+  // Parcela 1
+  installment1Percent   Decimal       @default(50) @db.Decimal(5, 2)  // % da parcela 1
+  installment1Day       Int           @default(15)         // Dia da parcela 1
+  
+  // Parcela 2
+  installment2Percent   Decimal       @default(50) @db.Decimal(5, 2)  // % da parcela 2
+  installment2Day       Int           @default(30)         // Dia da parcela 2
+  
+  // Parcela 3 (só se installmentCount = 4)
+  installment3Percent   Decimal       @default(0) @db.Decimal(5, 2)   // % da parcela 3
+  installment3Day       Int?                               // Dia da parcela 3
+  
+  // Parcela 4 (só se installmentCount = 4)
+  installment4Percent   Decimal       @default(0) @db.Decimal(5, 2)   // % da parcela 4
+  installment4Day       Int?                               // Dia da parcela 4
   
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
@@ -744,13 +895,6 @@ model PayslipBenefit {
   benefit     CustomBenefit @relation(fields: [benefitId], references: [id], onDelete: Cascade)
   
   @@map("payslip_benefits")
-}
-
-// Frequência de pagamento
-enum PaymentFrequency {
-  WEEKLY      // Semanal
-  BIWEEKLY    // Quinzenal
-  MONTHLY     // Mensal
 }
 
 // Tipo de benefício
@@ -897,4 +1041,253 @@ model AuditLog {
   @@index([userId])
   @@index([module, entityId])
   @@map("audit_logs")
+}
+
+// ==========================================
+// CALENDÁRIO DE FERIADOS (Holidays)
+// ==========================================
+
+// Feriados nacionais, estaduais, municipais ou da empresa
+model Holiday {
+  id          String      @id @default(uuid()) @db.Uuid
+  companyId   String      @db.Uuid
+  name        String      // Nome do feriado (ex: "Natal", "Dia do Trabalho")
+  date        DateTime    @db.Date // Data do feriado
+  type        HolidayType @default(NATIONAL) // Tipo do feriado
+  recurring   Boolean     @default(true) // Se repete todo ano (ex: Natal = true, Carnaval = false)
+  halfDay     Boolean     @default(false) // Meio período (ponto facultativo)
+  active      Boolean     @default(true)
+  notes       String?     // Observações
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@unique([companyId, date, name])
+  @@index([companyId, date])
+  @@index([companyId, active])
+  @@map("holidays")
+}
+
+enum HolidayType {
+  NATIONAL    // Feriado nacional (ex: Independência)
+  STATE       // Feriado estadual (ex: Revolução Constitucionalista em SP)
+  MUNICIPAL   // Feriado municipal (ex: Aniversário da cidade)
+  COMPANY     // Feriado/folga da empresa
+  OPTIONAL    // Ponto facultativo
+}
+
+// ==========================================
+// FÉRIAS (Vacation)
+// ==========================================
+
+// Período de férias do funcionário
+model Vacation {
+  id                String          @id @default(uuid()) @db.Uuid
+  employeeId        String          @db.Uuid
+  companyId         String          @db.Uuid
+  
+  // Período aquisitivo (12 meses para adquirir direito)
+  acquisitionStart  DateTime        @db.Date  // Início do período aquisitivo
+  acquisitionEnd    DateTime        @db.Date  // Fim do período aquisitivo (12 meses depois)
+  
+  // Período concessivo (12 meses para a empresa conceder)
+  concessionStart   DateTime        @db.Date  // Início do período concessivo
+  concessionEnd     DateTime        @db.Date  // Fim do período concessivo
+  
+  // Dias de direito
+  totalDays         Int             @default(30)  // Total de dias de direito (pode ser menor se muitas faltas)
+  soldDays          Int             @default(0)   // Dias vendidos (abono pecuniário, máx 10)
+  usedDays          Int             @default(0)   // Dias já usufruídos
+  remainingDays     Int             @default(30)  // Dias restantes a gozar
+  
+  // Status geral das férias
+  status            VacationStatus  @default(PENDING)
+  
+  // Aprovação
+  approvedBy        String?         @db.Uuid
+  approvedAt        DateTime?
+  
+  // Regularização (para férias já pagas/gozadas antes da migração)
+  regularizedAt     DateTime?                 // Data em que foi regularizado no sistema
+  regularizedBy     String?         @db.Uuid  // Quem regularizou
+  regularizationType String?                  // 'ENJOYED' (gozadas) ou 'PAID_DOUBLE' (pagas em dobro)
+  regularizationDate DateTime?      @db.Date  // Data em que as férias foram efetivamente gozadas/pagas
+  
+  // Observações
+  notes             String?
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relacionamentos
+  employee          Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  approver          User?           @relation(fields: [approvedBy], references: [id], onDelete: SetNull)
+  periods           VacationPeriod[]
+  requests          VacationRequest[]
+  
+  @@index([employeeId, status])
+  @@index([companyId, status])
+  @@index([companyId, concessionEnd])
+  @@map("vacations")
+}
+
+// Período de gozo das férias (pode ter até 3 períodos)
+model VacationPeriod {
+  id              String                @id @default(uuid()) @db.Uuid
+  vacationId      String                @db.Uuid
+  
+  periodNumber    Int                   // 1, 2 ou 3
+  startDate       DateTime              @db.Date  // Data início do período
+  endDate         DateTime              @db.Date  // Data fim do período
+  days            Int                   // Quantidade de dias corridos
+  
+  // Pagamento (deve ser feito até 2 dias antes do início)
+  paymentDueDate  DateTime?             @db.Date  // Data limite para pagamento
+  baseValue       Decimal?              @db.Decimal(10, 2) // Valor base (salário proporcional)
+  bonusValue      Decimal?              @db.Decimal(10, 2) // 1/3 constitucional
+  totalValue      Decimal?              @db.Decimal(10, 2) // Total a pagar
+  paidAt          DateTime?             // Quando foi pago
+  
+  // Status do período
+  status          VacationPeriodStatus  @default(SCHEDULED)
+  
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  
+  // Relacionamentos
+  vacation        Vacation              @relation(fields: [vacationId], references: [id], onDelete: Cascade)
+  
+  @@index([vacationId, periodNumber])
+  @@index([startDate, endDate])
+  @@map("vacation_periods")
+}
+
+enum VacationStatus {
+  PENDING       // Aguardando programação
+  SCHEDULED     // Programado (períodos definidos)
+  IN_PROGRESS   // Em andamento (pelo menos 1 período iniciou)
+  COMPLETED     // Concluído (todos os dias gozados)
+  EXPIRED       // Vencido (não tirou no período concessivo - paga em dobro!)
+  REGULARIZED   // Regularizado (férias já pagas/gozadas antes da migração do sistema)
+  CANCELLED     // Cancelado
+}
+
+enum VacationPeriodStatus {
+  SCHEDULED     // Agendado
+  IN_PROGRESS   // Em andamento
+  COMPLETED     // Concluído
+  CANCELLED     // Cancelado
+}
+
+// ==========================================
+// SOLICITAÇÃO DE FÉRIAS (Vacation Request)
+// ==========================================
+
+// Solicitação de férias pelo funcionário
+model VacationRequest {
+  id                  String                @id @default(uuid()) @db.Uuid
+  employeeId          String                @db.Uuid
+  companyId           String                @db.Uuid
+  vacationId          String?               @db.Uuid  // Período aquisitivo relacionado
+  
+  // Dados da solicitação
+  requestedStartDate  DateTime              @db.Date  // Data início solicitada
+  requestedDays       Int                   // Quantidade de dias solicitados
+  
+  // Divisão de períodos (opcional - JSON com até 3 períodos)
+  // Ex: [{ startDate: "2026-01-15", days: 15 }, { startDate: "2026-07-01", days: 15 }]
+  requestedPeriods    Json?
+  
+  // Abono pecuniário (venda de dias)
+  sellDays            Int                   @default(0)  // Dias a vender (máx 10 pela CLT)
+  
+  // Observações do funcionário
+  employeeNotes       String?
+  
+  // Status da solicitação
+  status              VacationRequestStatus @default(PENDING)
+  
+  // Contraproposta do admin (se houver)
+  counterProposal     Json?                 // { startDate, days, periods, sellDays, notes }
+  counterProposalAt   DateTime?
+  counterProposalBy   String?               @db.Uuid
+  counterProposalNotes String?
+  
+  // Resposta do funcionário à contraproposta
+  counterResponseAt   DateTime?
+  counterAccepted     Boolean?
+  counterResponseNotes String?
+  
+  // Aprovação final
+  approvedAt          DateTime?
+  approvedBy          String?               @db.Uuid
+  rejectedAt          DateTime?
+  rejectedBy          String?               @db.Uuid
+  rejectionReason     String?
+  
+  // Assinatura do funcionário
+  employeeViewedAt    DateTime?             // Quando visualizou o aviso
+  employeeScrolledAt  DateTime?             // Quando rolou até o final (obrigatório para assinar)
+  employeeScrolled    Boolean               @default(false) // Rolou até o final
+  employeeSignedAt    DateTime?             // Quando assinou
+  employeeSignedIp    String?               // IP da assinatura
+  employeeSignedDevice String?              // User-Agent
+  employeeSignatureHash String?             // Hash da assinatura
+  
+  // Assinatura do admin/RH
+  adminSignedAt       DateTime?             // Quando o admin assinou
+  adminSignedBy       String?               @db.Uuid
+  adminSignedIp       String?
+  adminSignedDevice   String?
+  adminSignatureHash  String?
+  
+  // Documento gerado
+  documentHash        String?               // Hash SHA-256 do documento
+  pdfPath             String?               // Caminho do PDF no MinIO
+  
+  // Validações CLT (registrar se houve violação)
+  cltViolations       Json?                 // Array de violações detectadas
+  cltWarningsIgnored  Boolean               @default(false) // Se ignorou avisos (modo FLEXIBLE)
+  
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  
+  // Relacionamentos
+  employee            Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company             Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vacation            Vacation?             @relation(fields: [vacationId], references: [id], onDelete: SetNull)
+  
+  @@index([employeeId, status])
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
+  @@map("vacation_requests")
+}
+
+enum VacationRequestStatus {
+  PENDING             // Aguardando análise do admin
+  COUNTER_PROPOSAL    // Admin fez contraproposta, aguardando resposta do funcionário
+  APPROVED            // Aprovado pelo admin
+  REJECTED            // Rejeitado pelo admin
+  AWAITING_SIGNATURE  // Aprovado, aguardando assinaturas
+  EMPLOYEE_SIGNED     // Funcionário assinou, aguardando admin
+  COMPLETED           // Ambos assinaram, processo concluído
+  CANCELLED           // Cancelado
+}
+
+// Regime de trabalho da empresa
+enum WorkRegime {
+  SINGLE_SHIFT     // Turno único (apenas horário comercial diurno)
+  MULTIPLE_SHIFTS  // Múltiplos turnos (manhã, tarde, noite)
+  CONTINUOUS_24H   // Operação 24 horas (hospitais, fábricas, segurança)
+}
+
+// Escala de trabalho do funcionário
+enum WorkSchedule {
+  FIVE_TWO          // 5x2 - Segunda a Sexta (22 dias/mês, folga sáb/dom)
+  SIX_ONE           // 6x1 - Segunda a Sábado (26 dias/mês, folga dom)
+  TWELVE_THIRTYSIX  // 12x36 - 12h trabalha, 36h folga (~15 dias/mês)
+  FOUR_TWO          // 4x2 - 4 dias trabalha, 2 folga (~20 dias/mês)
+  CUSTOM            // Personalizado (usa workDaysPerMonth manual no funcionário)
 }

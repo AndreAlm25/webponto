@@ -7,6 +7,8 @@ import { useMessages, MessageThread } from '@/hooks/useMessages'
 import { MessageSquare, Search, Loader2, MessageCircleMore, Plus, X } from 'lucide-react'
 import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
+import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { Comfortaa } from 'next/font/google'
 import Image from 'next/image'
 import { getFileUrl } from '@/utils/files'
@@ -169,30 +171,38 @@ export default function MessagesPage() {
     emp.name?.toLowerCase().includes(employeeSearch.toLowerCase())
   )
 
+  const company = params?.company
+  const base = company ? `/admin/${encodeURIComponent(company)}` : '/admin'
+
   return (
     <ProtectedPage permission={PERMISSIONS.MESSAGES_VIEW}>
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <MessageSquare className="w-6 h-6 text-primary" />
-            <h1 className={`${comfortaa.className} text-2xl font-bold`}>Mensagens</h1>
-          </div>
-          <Can permission={PERMISSIONS.MESSAGES_CREATE}>
-            <button
-              onClick={handleNewMessage}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              <span className={`${comfortaa.className} font-semibold`}>Nova Mensagem</span>
-            </button>
-          </Can>
-        </div>
+    <PageContainer>
+      <PageHeader
+        title="Mensagens"
+        description="Comunicação com funcionários"
+        icon={<MessageSquare className="h-6 w-6" />}
+        breadcrumbs={[
+          { label: 'Admin', href: base },
+          { label: 'Comunicação' },
+          { label: 'Mensagens' }
+        ]}
+      />
+
+      {/* Header com botão */}
+      <div className="mt-6 flex items-center justify-end mb-4">
+        <Can permission={PERMISSIONS.MESSAGES_CREATE}>
+          <button
+            onClick={handleNewMessage}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            <span className={`${comfortaa.className} font-semibold`}>Nova Mensagem</span>
+          </button>
+        </Can>
       </div>
 
       {/* Estatísticas */}
-      <div className="px-6 py-4 border-b border-border">
+      <div className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center justify-between">
@@ -398,7 +408,7 @@ export default function MessagesPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
     </ProtectedPage>
   )
 }

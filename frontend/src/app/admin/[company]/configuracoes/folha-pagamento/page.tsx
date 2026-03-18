@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,30 +37,25 @@ import {
 } from 'lucide-react'
 
 // Tipos
+type PaymentMode = 'FULL' | 'ADVANCE' | 'INSTALLMENTS'
+
 interface PayrollConfig {
   id: string
-  // Frequência e dias de pagamento
-  paymentFrequency: string
-  paymentDay1: number
-  paymentDay2: number | null
-  paymentDayOfWeek: number | null
   // Encargos
   enableInss: boolean
   enableIrrf: boolean
   enableFgts: boolean
+  // Desconto de atrasos
+  enableLateDiscount: boolean
   // Adicional noturno
   enableNightShift: boolean
   nightShiftStart: string
   nightShiftEnd: string
   nightShiftPercentage: number
-  // Adiantamento salarial
-  enableSalaryAdvance: boolean
-  salaryAdvanceDay: number | null
-  salaryAdvancePercentage: number | null
   // Vale avulso
   enableExtraAdvance: boolean
   maxExtraAdvancePercentage: number | null
-  // Benefícios
+  // Benefícios padrão da empresa
   enableTransportVoucher: boolean
   transportVoucherRate: number
   enableMealVoucher: boolean
@@ -69,11 +65,24 @@ interface PayrollConfig {
   healthInsuranceValue: number
   enableDentalInsurance: boolean
   dentalInsuranceValue: number
+  // 13º e Férias
   enable13thSalary: boolean
   enableVacationBonus: boolean
-  // Cálculo
-  workDaysPerMonth: number
-  workHoursPerDay: number
+  // Modo de pagamento flexível
+  paymentMode: PaymentMode
+  fullPaymentDay: number
+  advancePercent: number
+  advancePaymentDay: number
+  balancePaymentDay: number
+  installmentCount: number
+  installment1Percent: number
+  installment1Day: number
+  installment2Percent: number
+  installment2Day: number
+  installment3Percent: number
+  installment3Day: number | null
+  installment4Percent: number
+  installment4Day: number | null
 }
 
 interface PaymentGroup {
@@ -112,13 +121,6 @@ interface Employee {
   customValue: number | null
 }
 
-// Frequência de pagamento
-const PAYMENT_FREQUENCIES = [
-  { value: 'WEEKLY', label: 'Semanal' },
-  { value: 'BIWEEKLY', label: 'Quinzenal' },
-  { value: 'MONTHLY', label: 'Mensal' },
-]
-
 export default function PayrollConfigPage({ params }: { params: { company: string } }) {
   const { company } = params
   const { companyId, companySlug, slugMismatch, loading } = useCompanySlug()
@@ -128,6 +130,8 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
   const [benefits, setBenefits] = useState<CustomBenefit[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [workRegime, setWorkRegime] = useState<string>('SINGLE_SHIFT')
+  const [complianceLevel, setComplianceLevel] = useState<'FULL' | 'FLEXIBLE' | 'CUSTOM'>('FULL')
   
   // Modal de benefício
   const [showBenefitModal, setShowBenefitModal] = useState(false)
@@ -161,11 +165,14 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const [configRes, benefitsRes] = await Promise.all([
+      const [configRes, benefitsRes, companyRes] = await Promise.all([
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payroll/config?companyId=${companyId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payroll/benefits?companyId=${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/company?companyId=${companyId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ])
@@ -178,6 +185,12 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
       if (benefitsRes.ok) {
         const data = await benefitsRes.json()
         setBenefits(data.benefits)
+      }
+
+      if (companyRes.ok) {
+        const companyData = await companyRes.json()
+        setWorkRegime(companyData.workRegime || 'SINGLE_SHIFT')
+        setComplianceLevel(companyData.complianceLevel || 'FULL')
       }
     } catch (error) {
       console.error('Erro ao buscar configurações:', error)
@@ -194,6 +207,17 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
   // Salvar configurações
   const handleSaveConfig = async () => {
     if (!config || !companyId) return
+    
+    // Validar soma das porcentagens para modo INSTALLMENTS
+    if (config.paymentMode === 'INSTALLMENTS') {
+      const total = (config.installment1Percent || 0) + 
+                    (config.installment2Percent || 0) + 
+                    (config.installmentCount === 4 ? (config.installment3Percent || 0) + (config.installment4Percent || 0) : 0)
+      if (total !== 100) {
+        toast.error(`A soma das porcentagens deve ser 100%. Atual: ${total}%`)
+        return
+      }
+    }
     
     setIsSaving(true)
     try {
@@ -402,291 +426,540 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
 
   return (
     <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
-      <PageHeader
-        title="Configurações da Folha"
-        description="Configure encargos, benefícios e parâmetros de cálculo"
-        icon={<Settings className="h-6 w-6" />}
-        breadcrumbs={[
-          { label: 'Admin', href: base },
-          { label: 'Configurações' },
-          { label: 'Folha de Pagamento' }
-        ]}
-      />
+      <PageContainer>
+        <PageHeader
+          title="Configurações da Folha"
+          description="Configure encargos, benefícios e parâmetros de cálculo"
+          icon={<Settings className="h-6 w-6" />}
+          breadcrumbs={[
+            { label: 'Admin', href: base },
+            { label: 'Configurações' },
+            { label: 'Folha de Pagamento' }
+          ]}
+        />
 
-      <div className="space-y-6">
-        {/* Configurações Gerais */}
-        <div className="border border-border rounded-lg bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Configurações Gerais
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label>Frequência de Pagamento</Label>
-              <select
-                className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background"
-                value={config?.paymentFrequency || 'MONTHLY'}
-                onChange={(e) => setConfig({ ...config!, paymentFrequency: e.target.value })}
-              >
-                {PAYMENT_FREQUENCIES.map((f) => (
-                  <option key={f.value} value={f.value}>{f.label}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Dias de pagamento dinâmicos conforme frequência */}
-            {config?.paymentFrequency === 'MONTHLY' && (
-              <div>
-                <Label>Dia do Pagamento</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={config?.paymentDay1 || 5}
-                  onChange={(e) => setConfig({ ...config!, paymentDay1: parseInt(e.target.value) })}
-                  className="mt-1"
-                />
-              </div>
-            )}
-            
-            {config?.paymentFrequency === 'BIWEEKLY' && (
-              <>
-                <div>
-                  <Label>1º Dia de Pagamento</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={config?.paymentDay1 || 5}
-                    onChange={(e) => setConfig({ ...config!, paymentDay1: parseInt(e.target.value) })}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label>2º Dia de Pagamento</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={config?.paymentDay2 || 20}
-                    onChange={(e) => setConfig({ ...config!, paymentDay2: parseInt(e.target.value) })}
-                    className="mt-1"
-                  />
-                </div>
-              </>
-            )}
-            
-            {config?.paymentFrequency === 'WEEKLY' && (
-              <div>
-                <Label>Dia da Semana</Label>
-                <select
-                  className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background"
-                  value={config?.paymentDayOfWeek ?? 5}
-                  onChange={(e) => setConfig({ ...config!, paymentDayOfWeek: parseInt(e.target.value) })}
-                >
-                  <option value={0}>Domingo</option>
-                  <option value={1}>Segunda-feira</option>
-                  <option value={2}>Terça-feira</option>
-                  <option value={3}>Quarta-feira</option>
-                  <option value={4}>Quinta-feira</option>
-                  <option value={5}>Sexta-feira</option>
-                  <option value={6}>Sábado</option>
-                </select>
-              </div>
-            )}
-            
-            <div>
-              <Label>Dias Úteis/Mês (padrão)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={31}
-                value={config?.workDaysPerMonth || 22}
-                onChange={(e) => setConfig({ ...config!, workDaysPerMonth: parseInt(e.target.value) })}
-                className="mt-1"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Usado como fallback se funcionário não tiver horário definido</p>
-            </div>
-            
-            <div>
-              <Label>Horas/Dia (padrão)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={24}
-                step={0.5}
-                value={config?.workHoursPerDay || 8}
-                onChange={(e) => setConfig({ ...config!, workHoursPerDay: parseFloat(e.target.value) })}
-                className="mt-1"
-              />
-            </div>
-          </div>
-        </div>
-
+        <div className="mt-6 space-y-6">
         {/* Encargos Obrigatórios */}
         <div className="border border-border rounded-lg bg-card p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Encargos (Ativar/Desativar)
+            Encargos e Obrigações
           </h2>
+          
+          {/* Aviso para Conformidade CLT */}
+          {complianceLevel === 'FULL' && (
+            <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+                ℹ️ Modo Conformidade CLT ativo
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                INSS, IRRF, FGTS, 13º Salário e Férias são obrigatórios por lei e não podem ser desativados.
+                Para personalizar, altere o <strong>Nível de Conformidade</strong> em{' '}
+                <a href={`${base}/configuracoes/conformidade-clt`} className="text-primary underline hover:no-underline">
+                  Conformidade CLT
+                </a>.
+              </p>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-              <div>
-                <p className="font-medium">INSS</p>
-                <p className="text-sm text-muted-foreground">Desconto do funcionário (7,5% a 14%)</p>
+            {/* INSS - Obrigatório no modo FULL */}
+            {complianceLevel !== 'FULL' && (
+              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div>
+                  <p className="font-medium">INSS</p>
+                  <p className="text-sm text-muted-foreground">Desconto do funcionário (7,5% a 14%)</p>
+                </div>
+                <Switch
+                  checked={config?.enableInss || false}
+                  onCheckedChange={(checked) => setConfig({ ...config!, enableInss: checked })}
+                />
               </div>
-              <Switch
-                checked={config?.enableInss || false}
-                onCheckedChange={(checked) => setConfig({ ...config!, enableInss: checked })}
-              />
-            </div>
+            )}
             
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-              <div>
-                <p className="font-medium">IRRF</p>
-                <p className="text-sm text-muted-foreground">Imposto de Renda Retido na Fonte</p>
+            {/* IRRF - Obrigatório no modo FULL */}
+            {complianceLevel !== 'FULL' && (
+              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div>
+                  <p className="font-medium">IRRF</p>
+                  <p className="text-sm text-muted-foreground">Imposto de Renda Retido na Fonte</p>
+                </div>
+                <Switch
+                  checked={config?.enableIrrf || false}
+                  onCheckedChange={(checked) => setConfig({ ...config!, enableIrrf: checked })}
+                />
               </div>
-              <Switch
-                checked={config?.enableIrrf || false}
-                onCheckedChange={(checked) => setConfig({ ...config!, enableIrrf: checked })}
-              />
-            </div>
+            )}
             
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-              <div>
-                <p className="font-medium">FGTS</p>
-                <p className="text-sm text-muted-foreground">Obrigação da empresa (8%)</p>
+            {/* FGTS - Obrigatório no modo FULL */}
+            {complianceLevel !== 'FULL' && (
+              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div>
+                  <p className="font-medium">FGTS</p>
+                  <p className="text-sm text-muted-foreground">Obrigação da empresa (8%)</p>
+                </div>
+                <Switch
+                  checked={config?.enableFgts || false}
+                  onCheckedChange={(checked) => setConfig({ ...config!, enableFgts: checked })}
+                />
               </div>
-              <Switch
-                checked={config?.enableFgts || false}
-                onCheckedChange={(checked) => setConfig({ ...config!, enableFgts: checked })}
-              />
-            </div>
+            )}
             
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-              <div>
-                <p className="font-medium">13º Salário</p>
-                <p className="text-sm text-muted-foreground">Provisionar 13º salário</p>
+            {/* 13º Salário - Obrigatório no modo FULL */}
+            {complianceLevel !== 'FULL' && (
+              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div>
+                  <p className="font-medium">13º Salário</p>
+                  <p className="text-sm text-muted-foreground">Provisionar 13º salário</p>
+                </div>
+                <Switch
+                  checked={config?.enable13thSalary || false}
+                  onCheckedChange={(checked) => setConfig({ ...config!, enable13thSalary: checked })}
+                />
               </div>
-              <Switch
-                checked={config?.enable13thSalary || false}
-                onCheckedChange={(checked) => setConfig({ ...config!, enable13thSalary: checked })}
-              />
-            </div>
+            )}
             
+            {/* Férias + 1/3 - Obrigatório no modo FULL */}
+            {complianceLevel !== 'FULL' && (
+              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div>
+                  <p className="font-medium">Férias + 1/3</p>
+                  <p className="text-sm text-muted-foreground">Provisionar férias</p>
+                </div>
+                <Switch
+                  checked={config?.enableVacationBonus || false}
+                  onCheckedChange={(checked) => setConfig({ ...config!, enableVacationBonus: checked })}
+                />
+              </div>
+            )}
+            
+            {/* Descontar Atrasos - Sempre editável */}
             <div className="flex items-center justify-between p-4 border border-border rounded-lg">
               <div>
-                <p className="font-medium">Férias + 1/3</p>
-                <p className="text-sm text-muted-foreground">Provisionar férias</p>
+                <p className="font-medium">Descontar Atrasos</p>
+                <p className="text-sm text-muted-foreground">
+                  {config?.enableLateDiscount !== false 
+                    ? 'Atrasos são descontados do salário' 
+                    : 'Atrasos são registrados mas NÃO descontados'}
+                </p>
               </div>
               <Switch
-                checked={config?.enableVacationBonus || false}
-                onCheckedChange={(checked) => setConfig({ ...config!, enableVacationBonus: checked })}
+                checked={config?.enableLateDiscount !== false}
+                onCheckedChange={(checked) => setConfig({ ...config!, enableLateDiscount: checked })}
               />
             </div>
           </div>
         </div>
 
-        {/* Adicional Noturno */}
+        {/* Modo de Pagamento Flexível */}
         <div className="border border-border rounded-lg bg-card p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Moon className="h-5 w-5" />
-            Adicional Noturno
+            <Calendar className="h-5 w-5" />
+            Modo de Pagamento
           </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Configure como a empresa paga os funcionários: mensal (uma vez), adiantamento (vale + saldo) ou parcelado (2 ou 4 vezes).
+          </p>
           
-          <div className="flex items-center justify-between p-4 border border-border rounded-lg mb-4">
-            <div>
-              <p className="font-medium">Habilitar Adicional Noturno</p>
-              <p className="text-sm text-muted-foreground">Calcular adicional para horas trabalhadas no período noturno (CLT: 22h às 05h = +20%)</p>
+          {/* Seleção do Modo */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div 
+              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                config?.paymentMode === 'FULL' 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-border hover:border-primary/50'
+              }`}
+              onClick={() => setConfig({ ...config!, paymentMode: 'FULL' })}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-4 h-4 rounded-full border-2 ${
+                  config?.paymentMode === 'FULL' ? 'border-primary bg-primary' : 'border-muted-foreground'
+                }`}>
+                  {config?.paymentMode === 'FULL' && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span className="font-medium">Mensal</span>
+              </div>
+              <p className="text-sm text-muted-foreground">Pagamento único (100% de uma vez)</p>
             </div>
-            <Switch
-              checked={config?.enableNightShift || false}
-              onCheckedChange={(checked) => setConfig({ ...config!, enableNightShift: checked })}
-            />
+            
+            <div 
+              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                config?.paymentMode === 'ADVANCE' 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-border hover:border-primary/50'
+              }`}
+              onClick={() => setConfig({ ...config!, paymentMode: 'ADVANCE' })}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-4 h-4 rounded-full border-2 ${
+                  config?.paymentMode === 'ADVANCE' ? 'border-primary bg-primary' : 'border-muted-foreground'
+                }`}>
+                  {config?.paymentMode === 'ADVANCE' && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span className="font-medium">Adiantamento</span>
+              </div>
+              <p className="text-sm text-muted-foreground">Vale + Saldo (ex: 40% dia 15 + 60% dia 5)</p>
+            </div>
+            
+            <div 
+              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                config?.paymentMode === 'INSTALLMENTS' 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-border hover:border-primary/50'
+              }`}
+              onClick={() => setConfig({ ...config!, paymentMode: 'INSTALLMENTS' })}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-4 h-4 rounded-full border-2 ${
+                  config?.paymentMode === 'INSTALLMENTS' ? 'border-primary bg-primary' : 'border-muted-foreground'
+                }`}>
+                  {config?.paymentMode === 'INSTALLMENTS' && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span className="font-medium">Parcelado</span>
+              </div>
+              <p className="text-sm text-muted-foreground">Dividir em 2 ou 4 parcelas</p>
+            </div>
           </div>
           
-          {config?.enableNightShift && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label>Início do Horário Noturno</Label>
-                <Input
-                  type="time"
-                  value={config?.nightShiftStart || '22:00'}
-                  onChange={(e) => setConfig({ ...config!, nightShiftStart: e.target.value })}
-                  className="mt-1"
-                />
+          {/* Configuração FULL (Mensal) */}
+          {config?.paymentMode === 'FULL' && (
+            <div className="p-4 border border-border rounded-lg bg-muted/30">
+              <h3 className="font-medium mb-3">Configuração do Pagamento Mensal</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Dia do Pagamento</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={config?.fullPaymentDay || 5}
+                    onChange={(e) => setConfig({ ...config!, fullPaymentDay: parseInt(e.target.value) || 5 })}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Dia do mês seguinte ao trabalhado</p>
+                </div>
               </div>
-              <div>
-                <Label>Fim do Horário Noturno</Label>
-                <Input
-                  type="time"
-                  value={config?.nightShiftEnd || '05:00'}
-                  onChange={(e) => setConfig({ ...config!, nightShiftEnd: e.target.value })}
-                  className="mt-1"
-                />
+            </div>
+          )}
+          
+          {/* Configuração ADVANCE (Adiantamento) */}
+          {config?.paymentMode === 'ADVANCE' && (
+            <div className="p-4 border border-border rounded-lg bg-muted/30">
+              <h3 className="font-medium mb-3">Configuração do Adiantamento</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <Label>% Adiantamento</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={config?.advancePercent || 40}
+                    onChange={(e) => setConfig({ ...config!, advancePercent: parseInt(e.target.value) || 40 })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Dia do Adiantamento</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={config?.advancePaymentDay || 15}
+                    onChange={(e) => setConfig({ ...config!, advancePaymentDay: parseInt(e.target.value) || 15 })}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Mesmo mês</p>
+                </div>
+                <div>
+                  <Label>% Saldo</Label>
+                  <Input
+                    type="number"
+                    value={100 - (config?.advancePercent || 40)}
+                    disabled
+                    className="mt-1 bg-muted"
+                  />
+                </div>
+                <div>
+                  <Label>Dia do Saldo</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={config?.balancePaymentDay || 5}
+                    onChange={(e) => setConfig({ ...config!, balancePaymentDay: parseInt(e.target.value) || 5 })}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Mês seguinte</p>
+                </div>
               </div>
-              <div>
-                <Label>Percentual Adicional (%)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={config?.nightShiftPercentage || 20}
-                  onChange={(e) => setConfig({ ...config!, nightShiftPercentage: parseFloat(e.target.value) })}
-                  className="mt-1"
-                />
+            </div>
+          )}
+          
+          {/* Configuração INSTALLMENTS (Parcelado) */}
+          {config?.paymentMode === 'INSTALLMENTS' && (
+            <div className="p-4 border border-border rounded-lg bg-muted/30">
+              <h3 className="font-medium mb-3">Configuração do Parcelamento</h3>
+              
+              {/* Quantidade de parcelas */}
+              <div className="mb-4">
+                <Label>Quantidade de Parcelas</Label>
+                <div className="flex gap-4 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="installmentCount"
+                      checked={config?.installmentCount === 2}
+                      onChange={() => setConfig({ 
+                        ...config!, 
+                        installmentCount: 2,
+                        installment1Percent: 50,
+                        installment2Percent: 50,
+                        installment3Percent: 0,
+                        installment4Percent: 0,
+                      })}
+                      className="w-4 h-4"
+                    />
+                    <span>2 parcelas (quinzenal)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="installmentCount"
+                      checked={config?.installmentCount === 4}
+                      onChange={() => setConfig({ 
+                        ...config!, 
+                        installmentCount: 4,
+                        installment1Percent: 25,
+                        installment2Percent: 25,
+                        installment3Percent: 25,
+                        installment4Percent: 25,
+                        installment3Day: 21,
+                        installment4Day: 28,
+                      })}
+                      className="w-4 h-4"
+                    />
+                    <span>4 parcelas (semanal)</span>
+                  </label>
+                </div>
               </div>
+              
+              {/* Parcelas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Parcela 1 */}
+                <div className="p-3 border border-border rounded bg-background">
+                  <p className="font-medium text-sm mb-2">Parcela 1</p>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Porcentagem (%)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={config?.installment1Percent || 50}
+                        onChange={(e) => setConfig({ ...config!, installment1Percent: parseInt(e.target.value) || 0 })}
+                        className="mt-1 h-8"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Dia</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={config?.installment1Day || 7}
+                        onChange={(e) => setConfig({ ...config!, installment1Day: parseInt(e.target.value) || 7 })}
+                        className="mt-1 h-8"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Parcela 2 */}
+                <div className="p-3 border border-border rounded bg-background">
+                  <p className="font-medium text-sm mb-2">Parcela 2</p>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Porcentagem (%)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={config?.installment2Percent || 50}
+                        onChange={(e) => setConfig({ ...config!, installment2Percent: parseInt(e.target.value) || 0 })}
+                        className="mt-1 h-8"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Dia</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={config?.installment2Day || 14}
+                        onChange={(e) => setConfig({ ...config!, installment2Day: parseInt(e.target.value) || 14 })}
+                        className="mt-1 h-8"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Parcela 3 (só se 4 parcelas) */}
+                {config?.installmentCount === 4 && (
+                  <div className="p-3 border border-border rounded bg-background">
+                    <p className="font-medium text-sm mb-2">Parcela 3</p>
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-xs">Porcentagem (%)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={config?.installment3Percent || 25}
+                          onChange={(e) => setConfig({ ...config!, installment3Percent: parseInt(e.target.value) || 0 })}
+                          className="mt-1 h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Dia</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={config?.installment3Day || 21}
+                          onChange={(e) => setConfig({ ...config!, installment3Day: parseInt(e.target.value) || 21 })}
+                          className="mt-1 h-8"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Parcela 4 (só se 4 parcelas) */}
+                {config?.installmentCount === 4 && (
+                  <div className="p-3 border border-border rounded bg-background">
+                    <p className="font-medium text-sm mb-2">Parcela 4</p>
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-xs">Porcentagem (%)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={config?.installment4Percent || 25}
+                          onChange={(e) => setConfig({ ...config!, installment4Percent: parseInt(e.target.value) || 0 })}
+                          className="mt-1 h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Dia</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={config?.installment4Day || 28}
+                          onChange={(e) => setConfig({ ...config!, installment4Day: parseInt(e.target.value) || 28 })}
+                          className="mt-1 h-8"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Validação: soma deve ser 100% */}
+              {config?.paymentMode === 'INSTALLMENTS' && (() => {
+                const total = (config?.installment1Percent || 0) + 
+                              (config?.installment2Percent || 0) + 
+                              (config?.installmentCount === 4 ? (config?.installment3Percent || 0) + (config?.installment4Percent || 0) : 0)
+                const isValid = total === 100
+                return (
+                  <div className={`mt-4 p-3 rounded-lg ${isValid ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
+                    <p className={`text-sm font-medium ${isValid ? 'text-green-600' : 'text-red-600'}`}>
+                      {isValid 
+                        ? `✓ Soma das porcentagens: ${total}% (correto)` 
+                        : `⚠ Soma das porcentagens: ${total}% (deve ser 100%)`
+                      }
+                    </p>
+                  </div>
+                )
+              })()}
             </div>
           )}
         </div>
 
-        {/* Adiantamento Salarial */}
-        <div className="border border-border rounded-lg bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Wallet className="h-5 w-5" />
-            Adiantamento Salarial (Vale Fixo)
-          </h2>
-          
-          <div className="flex items-center justify-between p-4 border border-border rounded-lg mb-4">
-            <div>
-              <p className="font-medium">Habilitar Adiantamento Salarial</p>
-              <p className="text-sm text-muted-foreground">Pagamento automático de % do salário em data fixa (ex: dia 5 = 40%)</p>
+        {/* Adicional Noturno - Só mostra se empresa tem múltiplos turnos ou opera 24h */}
+        {workRegime !== 'SINGLE_SHIFT' ? (
+          <div className="border border-border rounded-lg bg-card p-6">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Moon className="h-5 w-5" />
+              Adicional Noturno
+            </h2>
+            
+            <div className="flex items-center justify-between p-4 border border-border rounded-lg mb-4">
+              <div>
+                <p className="font-medium">Habilitar Adicional Noturno</p>
+                <p className="text-sm text-muted-foreground">Calcular adicional para horas trabalhadas no período noturno (CLT: 22h às 05h = +20%)</p>
+              </div>
+              <Switch
+                checked={config?.enableNightShift || false}
+                onCheckedChange={(checked) => setConfig({ ...config!, enableNightShift: checked })}
+              />
             </div>
-            <Switch
-              checked={config?.enableSalaryAdvance || false}
-              onCheckedChange={(checked) => setConfig({ ...config!, enableSalaryAdvance: checked })}
-            />
+            
+            {config?.enableNightShift && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Início do Horário Noturno</Label>
+                  <Input
+                    type="time"
+                    value={config?.nightShiftStart || '22:00'}
+                    onChange={(e) => setConfig({ ...config!, nightShiftStart: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Fim do Horário Noturno</Label>
+                  <Input
+                    type="time"
+                    value={config?.nightShiftEnd || '05:00'}
+                    onChange={(e) => setConfig({ ...config!, nightShiftEnd: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Percentual Adicional (%)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={config?.nightShiftPercentage || 20}
+                    onChange={(e) => setConfig({ ...config!, nightShiftPercentage: parseFloat(e.target.value) })}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-          
-          {config?.enableSalaryAdvance && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Dia do Adiantamento</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={config?.salaryAdvanceDay || 5}
-                  onChange={(e) => setConfig({ ...config!, salaryAdvanceDay: parseInt(e.target.value) })}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Percentual do Salário (%)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={config?.salaryAdvancePercentage || 40}
-                  onChange={(e) => setConfig({ ...config!, salaryAdvancePercentage: parseFloat(e.target.value) })}
-                  className="mt-1"
-                />
-              </div>
+        ) : (
+          <div className="border border-border rounded-lg bg-card p-6 opacity-60">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Moon className="h-5 w-5" />
+              Adicional Noturno
+            </h2>
+            <div className="p-4 bg-muted/50 border border-border rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>Não aplicável:</strong> Sua empresa está configurada como <strong>Turno Único</strong> (horário comercial diurno).
+                O adicional noturno só é aplicável para empresas com múltiplos turnos ou operação 24 horas.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Para habilitar esta opção, altere o <strong>Regime de Trabalho</strong> em{' '}
+                <a href={`${base}/configuracoes/empresa`} className="text-primary underline hover:no-underline">
+                  Dados da Empresa
+                </a>.
+              </p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Vale Avulso */}
         <div className="border border-border rounded-lg bg-card p-6">
@@ -971,7 +1244,6 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
             </div>
           )}
         </div>
-      </div>
 
       {/* Modal de Benefício */}
       {showBenefitModal && (
@@ -1122,6 +1394,8 @@ export default function PayrollConfigPage({ params }: { params: { company: strin
           </div>
         </div>
       )}
+      </div>
+      </PageContainer>
     </ProtectedPage>
   )
 }

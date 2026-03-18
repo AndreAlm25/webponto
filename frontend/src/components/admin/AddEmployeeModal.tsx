@@ -218,7 +218,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onEmployeeAdded, com
     if (!formData.email) missing.push('Email')
     if (!formData.password) missing.push('Senha')
     if (!formData.registrationId) missing.push('Matrícula')
-    if (!formData.hireDate) missing.push('Data de início')
+    if (!formData.hireDate) missing.push('Data de Admissão')
     if (!formData.salary) missing.push('Salário')
     if (!formData.workStartTime) missing.push('Horário de Início')
     if (!formData.workEndTime) missing.push('Horário de Fim')
@@ -501,7 +501,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onEmployeeAdded, com
                   <InputWithIcon
                     id="hireDate"
                     icon={<Calendar className="h-4 w-4" />}
-                    label="Data de Início *"
+                    label="Data de Admissão *"
                     name="hireDate"
                     type="date"
                     value={formData.hireDate}

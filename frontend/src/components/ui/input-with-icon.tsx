@@ -13,7 +13,12 @@ export interface InputWithIconProps
 }
 
 const InputWithIcon = React.forwardRef<HTMLInputElement, InputWithIconProps>(
-  ({ className, icon, label, containerClassName, labelClassName, error, ...props }, ref) => {
+  ({ className, icon, label, containerClassName, labelClassName, error, type, ...props }, ref) => {
+    // Classes para corrigir ícone do calendário/hora no tema dark
+    const dateTimeClasses = (type === 'date' || type === 'time') 
+      ? '[&::-webkit-calendar-picker-indicator]:dark:invert [&::-webkit-calendar-picker-indicator]:opacity-70 [&::-webkit-calendar-picker-indicator]:hover:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer'
+      : ''
+
     return (
       <div className={cn("space-y-2", containerClassName)}>
         <Label 
@@ -24,7 +29,8 @@ const InputWithIcon = React.forwardRef<HTMLInputElement, InputWithIconProps>(
           <span>{label}</span>
         </Label>
         <Input
-          className={cn(error && "border-red-500", className)}
+          type={type}
+          className={cn(dateTimeClasses, error && "border-red-500", className)}
           ref={ref}
           {...props}
         />

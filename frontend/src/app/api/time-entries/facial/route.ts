@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     
     // URL do backend (usa variável de ambiente para flexibilidade)
-    const backendUrl = process.env.BACKEND_URL || 'http://backend:4000'
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000'
     
     // Fazer proxy para o backend
     const response = await fetch(`${backendUrl}/api/time-entries/facial`, {

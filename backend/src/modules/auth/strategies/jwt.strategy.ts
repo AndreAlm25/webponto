@@ -38,6 +38,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Usuário não encontrado ou inativo');
     }
 
+    console.log('[JWT] User validated:', user.email, 'employeeId:', user.employeeId, 'employee:', user.employee?.id);
+
     return {
       id: user.id,
       email: user.email,
@@ -46,6 +48,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       companyId: user.companyId,
       company: user.company,
       employee: user.employee,
+      employeeId: user.employee?.id || null,
     };
   }
 }

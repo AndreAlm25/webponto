@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Scale, TrendingUp, Clock, AlertTriangle, DollarSign, Users, Download, FileText, Filter } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { PERMISSIONS, Can } from '@/hooks/usePermissions'
 import {
@@ -31,7 +32,7 @@ import {
 } from 'recharts'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 interface DashboardData {
   period: {
@@ -199,59 +200,94 @@ export default function DashboardConformidadePage() {
     doc.save(`conformidade-${period.startDate}-${period.endDate}.pdf`)
   }
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (!data) return
 
-    // Resumo
-    const summarySheet = [
-      ['Dashboard de Conformidade CLT'],
-      [`Período: ${period.startDate} até ${period.endDate}`],
-      [],
-      ['Métrica', 'Valor'],
-      ['Conformidade', `${data.summary.compliancePercentage.toFixed(1)}%`],
-      ['Total de Hora Extra', `R$ ${data.summary.overtime.totalValue.toFixed(2)}`],
-      ['Horas Extras', `${data.summary.overtime.totalHours.toFixed(1)}h`],
-      ['Violações', data.summary.violations.total],
-      ['Atrasos', data.summary.violations.late],
-      ['Violações de Descanso', data.summary.violations.restViolations],
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = 'WebPonto'
+    workbook.created = new Date()
+
+    // Estilo de cabeçalho
+    const headerStyle: Partial<ExcelJS.Style> = {
+      font: { bold: true, color: { argb: 'FFFFFFFF' } },
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } },
+      alignment: { horizontal: 'center' },
+    }
+
+    // Aba 1: Resumo
+    const wsResumo = workbook.addWorksheet('Resumo')
+    wsResumo.columns = [
+      { header: 'Métrica', key: 'metrica', width: 25 },
+      { header: 'Valor', key: 'valor', width: 20 },
     ]
-
-    // Dados diários
-    const dailySheet = [
-      ['Data', 'Minutos H.E.', 'Valor R$', 'Atrasos', 'Violações Descanso'],
-      ...data.charts.daily.map(day => [
-        day.date,
-        day.overtime,
-        day.overtimeValue.toFixed(2),
-        day.late,
-        day.restViolations,
-      ]),
+    wsResumo.getRow(1).eachCell(cell => { cell.style = headerStyle as ExcelJS.Style })
+    
+    const resumoData = [
+      { metrica: 'Período', valor: `${period.startDate} até ${period.endDate}` },
+      { metrica: 'Conformidade', valor: `${data.summary.compliancePercentage.toFixed(1)}%` },
+      { metrica: 'Total de Hora Extra', valor: `R$ ${data.summary.overtime.totalValue.toFixed(2)}` },
+      { metrica: 'Horas Extras', valor: `${data.summary.overtime.totalHours.toFixed(1)}h` },
+      { metrica: 'Violações', valor: data.summary.violations.total },
+      { metrica: 'Atrasos', valor: data.summary.violations.late },
+      { metrica: 'Violações de Descanso', valor: data.summary.violations.restViolations },
     ]
+    resumoData.forEach(item => wsResumo.addRow(item))
 
-    // Funcionários
-    const employeeSheet = [
-      ['Funcionário', 'Minutos H.E.', 'Horas H.E.', 'Valor R$', 'Atrasos', 'Violações'],
-      ...data.charts.byEmployee.map(emp => [
-        emp.employeeName || emp.employeeId.slice(0, 8),
-        emp.overtimeMinutes,
-        (emp.overtimeMinutes / 60).toFixed(1),
-        emp.overtimeValue.toFixed(2),
-        emp.lateCount,
-        emp.restViolations,
-      ]),
+    // Aba 2: Diário
+    const wsDiario = workbook.addWorksheet('Diário')
+    wsDiario.columns = [
+      { header: 'Data', key: 'date', width: 12 },
+      { header: 'Min. H.E.', key: 'overtime', width: 12 },
+      { header: 'Valor R$', key: 'value', width: 12 },
+      { header: 'Atrasos', key: 'late', width: 10 },
+      { header: 'Viol. Descanso', key: 'rest', width: 15 },
     ]
+    wsDiario.getRow(1).eachCell(cell => { cell.style = headerStyle as ExcelJS.Style })
+    
+    data.charts.daily.forEach(day => {
+      wsDiario.addRow({
+        date: day.date,
+        overtime: day.overtime,
+        value: day.overtimeValue.toFixed(2),
+        late: day.late,
+        rest: day.restViolations,
+      })
+    })
 
-    // Criar workbook
-    const wb = XLSX.utils.book_new()
-    const ws1 = XLSX.utils.aoa_to_sheet(summarySheet)
-    const ws2 = XLSX.utils.aoa_to_sheet(dailySheet)
-    const ws3 = XLSX.utils.aoa_to_sheet(employeeSheet)
+    // Aba 3: Funcionários
+    const wsFuncionarios = workbook.addWorksheet('Funcionários')
+    wsFuncionarios.columns = [
+      { header: 'Funcionário', key: 'name', width: 25 },
+      { header: 'Min. H.E.', key: 'minutes', width: 12 },
+      { header: 'Horas H.E.', key: 'hours', width: 12 },
+      { header: 'Valor R$', key: 'value', width: 12 },
+      { header: 'Atrasos', key: 'late', width: 10 },
+      { header: 'Violações', key: 'violations', width: 12 },
+    ]
+    wsFuncionarios.getRow(1).eachCell(cell => { cell.style = headerStyle as ExcelJS.Style })
+    
+    data.charts.byEmployee.forEach(emp => {
+      wsFuncionarios.addRow({
+        name: emp.employeeName || emp.employeeId.slice(0, 8),
+        minutes: emp.overtimeMinutes,
+        hours: (emp.overtimeMinutes / 60).toFixed(1),
+        value: emp.overtimeValue.toFixed(2),
+        late: emp.lateCount,
+        violations: emp.restViolations,
+      })
+    })
 
-    XLSX.utils.book_append_sheet(wb, ws1, 'Resumo')
-    XLSX.utils.book_append_sheet(wb, ws2, 'Diário')
-    XLSX.utils.book_append_sheet(wb, ws3, 'Funcionários')
-
-    XLSX.writeFile(wb, `conformidade-${period.startDate}-${period.endDate}.xlsx`)
+    // Baixar arquivo
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `conformidade-${period.startDate}-${period.endDate}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    a.remove()
   }
 
   if (loading) {
@@ -284,6 +320,7 @@ export default function DashboardConformidadePage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.COMPLIANCE_VIEW}>
+    <PageContainer>
     <TooltipProvider>
       <div className="space-y-6">
         <PageHeader
@@ -692,6 +729,7 @@ export default function DashboardConformidadePage() {
       )}
       </div>
     </TooltipProvider>
+    </PageContainer>
     </ProtectedPage>
   )
 }

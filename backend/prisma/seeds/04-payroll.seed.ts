@@ -1,20 +1,28 @@
 /**
  * 04 - Payroll Seed
- * Gera folha de pagamento e holerites para o mês anterior
- * com diferentes status de assinatura
+ * Gera folha de pagamento e holerites para 4 MESES
+ * incluindo o mês atual e 3 meses anteriores
  * 
- * CENÁRIOS:
- * - Holerite assinado (com PDF)
- * - Holerite pendente de assinatura
- * - Holerite calculado mas não aprovado
- * - Holerite de funcionário em férias
+ * CENÁRIOS POR MÊS:
+ * - Mês -3 (3 meses atrás): Todos PAID e assinados
+ * - Mês -2 (2 meses atrás): Todos PAID e assinados
+ * - Mês -1 (mês anterior): Mistura de status (PAID, APPROVED, CALCULATED)
+ * - Mês atual: CALCULATED (aguardando aprovação/pagamento)
+ * 
+ * IMPORTANTE: Gera dados para o MÊS ATUAL para testar o dashboard do funcionário
  */
 
 import { PrismaClient, PayrollStatus, PayslipStatus } from '@prisma/client'
 import * as crypto from 'crypto'
 
-// Status de holerite por funcionário
-const PAYSLIP_STATUS: Record<string, PayslipStatusConfig> = {
+// Status de holerite por funcionário para o MÊS ANTERIOR (mês -1)
+// Meses anteriores (-2, -3) são todos PAID
+// Mês atual é CALCULATED para todos
+const PAYSLIP_STATUS_PREV_MONTH: Record<string, PayslipStatusConfig> = {
+  // ==========================================
+  // ACME TECH
+  // ==========================================
+  
   // Paulo Santos - Assinado e pago
   'paulo.santos@acmetech.com.br': {
     status: 'PAID',
@@ -22,7 +30,7 @@ const PAYSLIP_STATUS: Record<string, PayslipStatusConfig> = {
     signedDaysAgo: 5,
   },
 
-  // João da Silva - Aprovado mas não assinado
+  // João da Silva - Aprovado mas não assinado (aguardando assinatura)
   'joao.silva@acmetech.com.br': {
     status: 'APPROVED',
     signed: false,
@@ -45,6 +53,30 @@ const PAYSLIP_STATUS: Record<string, PayslipStatusConfig> = {
   'ana.oliveira@acmetech.com.br': {
     status: 'PENDING',
     signed: false,
+  },
+
+  // ==========================================
+  // BETA SOLUTIONS
+  // ==========================================
+  
+  // Lucas Ferreira - Assinado e pago
+  'lucas.ferreira@betasolutions.com.br': {
+    status: 'PAID',
+    signed: true,
+    signedDaysAgo: 4,
+  },
+
+  // Juliana Costa - Aprovado (aguardando assinatura)
+  'juliana.costa@betasolutions.com.br': {
+    status: 'APPROVED',
+    signed: false,
+  },
+
+  // Roberto Almeida - Assinado e pago
+  'roberto.almeida@betasolutions.com.br': {
+    status: 'PAID',
+    signed: true,
+    signedDaysAgo: 2,
   },
 }
 
@@ -70,148 +102,191 @@ export async function seedPayroll(prisma: PrismaClient): Promise<void> {
     },
   })
 
-  // Mês anterior
+  // Calcular os 4 meses (mês atual + 3 anteriores)
   const today = new Date()
-  const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1
-  const prevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear()
+  const currentMonth = today.getMonth()
+  const currentYear = today.getFullYear()
 
-  console.log(`  → Gerando folha de ${getMonthName(prevMonth)}/${prevYear}`)
+  const months: Array<{ month: number; year: number; monthIndex: number }> = []
+  for (let i = 3; i >= 0; i--) {
+    let m = currentMonth - i
+    let y = currentYear
+    if (m < 0) {
+      m += 12
+      y -= 1
+    }
+    months.push({ month: m + 1, year: y, monthIndex: i }) // month é 1-12
+  }
+
+  console.log(`  → Gerando folhas de pagamento para 4 meses:`)
+  months.forEach(m => console.log(`    - ${getMonthName(m.month - 1)}/${m.year}`))
 
   for (const company of companies) {
     if (company.employees.length === 0) continue
 
-    // Criar folha de pagamento
-    const payroll = await prisma.payroll.create({
-      data: {
-        companyId: company.id,
-        referenceMonth: prevMonth + 1, // 1-12
-        referenceYear: prevYear,
-        status: 'PAID',
-        totalGross: 0,
-        totalDeductions: 0,
-        totalNet: 0,
-        totalEmployees: company.employees.length,
-        closedAt: new Date(prevYear, prevMonth, 28),
-        closedBy: null,
-        paidAt: new Date(prevYear, prevMonth + 1, 5),
-      },
-    })
+    let totalPayslips = 0
 
-    let totalGross = 0
-    let totalDeductions = 0
-    let totalNet = 0
-    let totalFgts = 0
+    // Gerar folha para cada mês
+    for (const { month, year, monthIndex } of months) {
+      const isCurrentMonth = monthIndex === 0
+      const isPrevMonth = monthIndex === 1
+      const isOlderMonth = monthIndex >= 2
 
-    // Criar holerites para cada funcionário
-    for (const employee of company.employees) {
-      if (!employee.user) continue
+      // Determinar status da folha
+      // PayrollStatus: DRAFT, CALCULATING, REVIEW, APPROVED, PAID, CANCELLED
+      let payrollStatus: PayrollStatus = 'PAID'
+      let closedAt: Date | null = new Date(year, month - 1, 28)
+      let paidAt: Date | null = new Date(year, month, 5)
 
-      const config = PAYSLIP_STATUS[employee.user.email] || { status: 'CALCULATED', signed: false }
-      const payrollConfig = company.payrollConfig
-
-      // Calcular valores do holerite
-      const payslipData = calculatePayslip(employee, payrollConfig, prevMonth, prevYear)
-
-      // Dados de assinatura
-      let signatureData = {}
-      if (config.signed) {
-        const signedAt = new Date()
-        signedAt.setDate(signedAt.getDate() - (config.signedDaysAgo || 1))
-        
-        const documentHash = crypto
-          .createHash('sha256')
-          .update(`${employee.id}-${prevMonth}-${prevYear}-${payslipData.netSalary}`)
-          .digest('hex')
-
-        signatureData = {
-          viewedAt: new Date(signedAt.getTime() - 60000), // 1 min antes
-          scrolledToEnd: true,
-          scrolledAt: new Date(signedAt.getTime() - 30000), // 30s antes
-          signedAt,
-          signedByIp: '192.168.1.' + Math.floor(Math.random() * 255),
-          signedByDevice: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          documentHash,
-          signatureTerms: true,
-        }
+      if (isCurrentMonth) {
+        payrollStatus = 'DRAFT' // Mês atual: em elaboração
+        closedAt = null
+        paidAt = null
+      } else if (isPrevMonth) {
+        payrollStatus = 'APPROVED' // Mês anterior: aprovada mas não paga
+        paidAt = null
       }
 
-      const payslip = await prisma.payslip.create({
+      // Criar folha de pagamento
+      const payroll = await prisma.payroll.create({
         data: {
           companyId: company.id,
-          employeeId: employee.id,
-          payrollId: payroll.id,
-          referenceMonth: prevMonth + 1,
-          referenceYear: prevYear,
-          status: config.status as PayslipStatus,
-          
-          // Dados do funcionário (snapshot)
-          employeeName: employee.user.name,
-          employeePosition: employee.position?.name || null,
-          employeeDepartment: employee.department?.name || null,
-          employeeRegistration: employee.registrationId,
-          
-          // Valores calculados (campos que existem no schema)
-          baseSalary: payslipData.baseSalary,
-          workedDays: payslipData.workedDays,
-          overtimeHours50: payslipData.overtime50Hours,
-          overtimeValue50: payslipData.overtime50Value,
-          overtimeHours100: payslipData.overtime100Hours,
-          overtimeValue100: payslipData.overtime100Value,
-          nightShiftHours: payslipData.nightShiftHours,
-          nightShiftValue: payslipData.nightShiftValue,
-          hazardPay: payslipData.hazardPay,
-          unhealthyPay: payslipData.unhealthyPay,
-          bonus: payslipData.bonus,
-          otherEarnings: payslipData.otherEarnings,
-          totalEarnings: payslipData.grossSalary,
-          absenceDays: payslipData.absenceDays,
-          absenceValue: payslipData.absenceValue,
-          lateMinutes: payslipData.lateMinutes,
-          lateValue: payslipData.lateValue,
-          inssBase: payslipData.inssBase,
-          inssValue: payslipData.inssValue,
-          inssRate: payslipData.inssRate,
-          irBase: payslipData.irrfBase,
-          irValue: payslipData.irrfValue,
-          irRate: payslipData.irrfRate,
-          transportVoucher: payslipData.transportVoucher,
-          mealVoucher: payslipData.mealVoucher,
-          healthInsurance: payslipData.healthInsurance,
-          dentalInsurance: payslipData.dentalInsurance,
-          totalDeductions: payslipData.totalDeductions,
-          fgtsBase: payslipData.fgtsBase,
-          fgtsValue: payslipData.fgtsValue,
-          grossSalary: payslipData.grossSalary,
-          netSalary: payslipData.netSalary,
-          
-          // Assinatura
-          ...signatureData,
+          referenceMonth: month,
+          referenceYear: year,
+          status: payrollStatus,
+          totalGross: 0,
+          totalDeductions: 0,
+          totalNet: 0,
+          totalEmployees: company.employees.length,
+          closedAt,
+          closedBy: null,
+          paidAt,
         },
       })
 
-      totalGross += payslipData.grossSalary
-      totalDeductions += payslipData.totalDeductions
-      totalNet += payslipData.netSalary
-      totalFgts += payslipData.fgtsValue
+      let totalGross = 0
+      let totalDeductions = 0
+      let totalNet = 0
 
-      // Log de desenvolvimento
-      if (process.env.NODE_ENV !== 'production') {
-        const statusIcon = config.signed ? '✅' : config.status === 'PAID' ? '💰' : '⏳'
-        console.log(`    ${statusIcon} ${employee.user.name}: R$ ${payslipData.netSalary.toFixed(2)} (${config.status})`)
+      // Criar holerites para cada funcionário
+      for (const employee of company.employees) {
+        if (!employee.user) continue
+
+        // Determinar status do holerite baseado no mês
+        let config: PayslipStatusConfig
+        if (isCurrentMonth) {
+          // Mês atual: CALCULATED (aguardando aprovação)
+          config = { status: 'CALCULATED', signed: false }
+        } else if (isPrevMonth) {
+          // Mês anterior: usar configuração específica
+          config = PAYSLIP_STATUS_PREV_MONTH[employee.user.email] || { status: 'CALCULATED', signed: false }
+        } else {
+          // Meses mais antigos: todos PAID e assinados
+          config = { status: 'PAID', signed: true, signedDaysAgo: 30 + (monthIndex * 30) }
+        }
+
+        const payrollConfig = company.payrollConfig
+
+        // Calcular valores do holerite
+        const payslipData = calculatePayslip(employee, payrollConfig, month - 1, year)
+
+        // Dados de assinatura
+        let signatureData = {}
+        if (config.signed) {
+          const signedAt = new Date()
+          signedAt.setDate(signedAt.getDate() - (config.signedDaysAgo || 1))
+          
+          const documentHash = crypto
+            .createHash('sha256')
+            .update(`${employee.id}-${month}-${year}-${payslipData.netSalary}`)
+            .digest('hex')
+
+          signatureData = {
+            viewedAt: new Date(signedAt.getTime() - 60000),
+            scrolledToEnd: true,
+            scrolledAt: new Date(signedAt.getTime() - 30000),
+            signedAt,
+            signedByIp: '192.168.1.' + Math.floor(Math.random() * 255),
+            signedByDevice: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            documentHash,
+            signatureTerms: true,
+          }
+        }
+
+        await prisma.payslip.create({
+          data: {
+            companyId: company.id,
+            employeeId: employee.id,
+            payrollId: payroll.id,
+            referenceMonth: month,
+            referenceYear: year,
+            status: config.status as PayslipStatus,
+            
+            // Dados do funcionário (snapshot)
+            employeeName: employee.user.name,
+            employeePosition: employee.position?.name || null,
+            employeeDepartment: employee.department?.name || null,
+            employeeRegistration: employee.registrationId,
+            
+            // Valores calculados
+            baseSalary: payslipData.baseSalary,
+            workedDays: payslipData.workedDays,
+            overtimeHours50: payslipData.overtime50Hours,
+            overtimeValue50: payslipData.overtime50Value,
+            overtimeHours100: payslipData.overtime100Hours,
+            overtimeValue100: payslipData.overtime100Value,
+            nightShiftHours: payslipData.nightShiftHours,
+            nightShiftValue: payslipData.nightShiftValue,
+            hazardPay: payslipData.hazardPay,
+            unhealthyPay: payslipData.unhealthyPay,
+            bonus: payslipData.bonus,
+            otherEarnings: payslipData.otherEarnings,
+            totalEarnings: payslipData.grossSalary,
+            absenceDays: payslipData.absenceDays,
+            absenceValue: payslipData.absenceValue,
+            lateMinutes: payslipData.lateMinutes,
+            lateValue: payslipData.lateValue,
+            lateDiscounted: payslipData.lateDiscounted,
+            inssBase: payslipData.inssBase,
+            inssValue: payslipData.inssValue,
+            inssRate: payslipData.inssRate,
+            irBase: payslipData.irrfBase,
+            irValue: payslipData.irrfValue,
+            irRate: payslipData.irrfRate,
+            transportVoucher: payslipData.transportVoucher,
+            mealVoucher: payslipData.mealVoucher,
+            healthInsurance: payslipData.healthInsurance,
+            dentalInsurance: payslipData.dentalInsurance,
+            totalDeductions: payslipData.totalDeductions,
+            fgtsBase: payslipData.fgtsBase,
+            fgtsValue: payslipData.fgtsValue,
+            grossSalary: payslipData.grossSalary,
+            netSalary: payslipData.netSalary,
+            
+            // Assinatura
+            ...signatureData,
+          },
+        })
+
+        totalGross += payslipData.grossSalary
+        totalDeductions += payslipData.totalDeductions
+        totalNet += payslipData.netSalary
+        totalPayslips++
+
+        // Log apenas para mês atual
+        if (isCurrentMonth && process.env.NODE_ENV !== 'production') {
+          console.log(`    📊 ${employee.user.name}: R$ ${payslipData.netSalary.toFixed(2)} (${config.status})`)
+        }
       }
+
+      // Atualizar totais da folha
+      await prisma.payroll.update({
+        where: { id: payroll.id },
+        data: { totalGross, totalDeductions, totalNet },
+      })
     }
 
-    // Atualizar totais da folha
-    await prisma.payroll.update({
-      where: { id: payroll.id },
-      data: {
-        totalGross,
-        totalDeductions,
-        totalNet,
-      },
-    })
-
-    console.log(`    ✓ ${company.tradeName}: ${company.employees.length} holerites gerados`)
+    console.log(`    ✓ ${company.tradeName}: ${totalPayslips} holerites gerados (4 meses)`)
   }
 }
 
@@ -260,12 +335,14 @@ function calculatePayslip(employee: any, config: any, month: number, year: numbe
 
   // Descontos
   const inssBase = grossSalary
-  const inssRate = calculateInssRate(inssBase)
-  const inssValue = config?.enableInss ? inssBase * inssRate : 0
+  const inssCalc = calculateInss(inssBase)
+  const inssValue = config?.enableInss ? inssCalc.value : 0
+  const inssRate = inssCalc.rate
 
   const irrfBase = grossSalary - inssValue
-  const irrfRate = calculateIrrfRate(irrfBase)
-  const irrfValue = config?.enableIrrf ? Math.max(0, irrfBase * irrfRate - getIrrfDeduction(irrfBase)) : 0
+  const irrfCalc = calculateIrrf(irrfBase)
+  const irrfValue = config?.enableIrrf ? irrfCalc.value : 0
+  const irrfRate = irrfCalc.rate
 
   const transportVoucher = config?.enableTransportVoucher 
     ? baseSalary * (parseFloat(config.transportVoucherRate?.toString() || '6') / 100)
@@ -279,7 +356,11 @@ function calculatePayslip(employee: any, config: any, month: number, year: numbe
     ? parseFloat(config.dentalInsuranceValue?.toString() || '0')
     : 0
 
-  const totalDeductions = inssValue + irrfValue + transportVoucher + healthInsurance + dentalInsurance + lateDeduction + absenceDeduction
+  // Atrasos: só desconta se enableLateDiscount === true
+  const lateDiscounted = config?.enableLateDiscount === true
+  const lateDeductionFinal = lateDiscounted ? lateDeduction : 0
+
+  const totalDeductions = inssValue + irrfValue + transportVoucher + healthInsurance + dentalInsurance + lateDeductionFinal + absenceDeduction
 
   const netSalary = grossSalary - totalDeductions
 
@@ -302,10 +383,10 @@ function calculatePayslip(employee: any, config: any, month: number, year: numbe
     otherEarnings: 0,
     grossSalary,
     inssBase,
-    inssRate: inssRate * 100,
+    inssRate, // Já vem como percentual (ex: 9.97)
     inssValue,
     irrfBase,
-    irrfRate: irrfRate * 100,
+    irrfRate, // Já vem como percentual (ex: 5.12)
     irrfValue,
     transportVoucher,
     mealVoucher: 0,
@@ -319,6 +400,7 @@ function calculatePayslip(employee: any, config: any, month: number, year: numbe
     absenceValue: absenceDeduction,
     lateMinutes: totalLateMinutes,
     lateValue: lateDeduction,
+    lateDiscounted,
     totalDeductions,
     fgtsBase,
     fgtsValue,
@@ -326,30 +408,53 @@ function calculatePayslip(employee: any, config: any, month: number, year: numbe
   }
 }
 
-function calculateInssRate(salary: number): number {
-  // Tabela INSS 2024
-  if (salary <= 1412.00) return 0.075
-  if (salary <= 2666.68) return 0.09
-  if (salary <= 4000.03) return 0.12
-  return 0.14
+function calculateInss(salary: number): { value: number; rate: number } {
+  // Tabela INSS 2024 - Cálculo PROGRESSIVO por faixas
+  const faixas = [
+    { limite: 1412.00, aliquota: 0.075 },
+    { limite: 2666.68, aliquota: 0.09 },
+    { limite: 4000.03, aliquota: 0.12 },
+    { limite: 7786.02, aliquota: 0.14 }, // Teto INSS
+  ]
+  
+  let inssTotal = 0
+  let salarioRestante = Math.min(salary, 7786.02) // Teto INSS
+  let faixaAnterior = 0
+  
+  for (const faixa of faixas) {
+    if (salarioRestante <= 0) break
+    const baseCalculo = Math.min(salarioRestante, faixa.limite - faixaAnterior)
+    inssTotal += baseCalculo * faixa.aliquota
+    salarioRestante -= baseCalculo
+    faixaAnterior = faixa.limite
+  }
+  
+  // Alíquota efetiva
+  const aliquotaEfetiva = salary > 0 ? (inssTotal / salary) * 100 : 0
+  
+  return { value: inssTotal, rate: aliquotaEfetiva }
 }
 
-function calculateIrrfRate(salary: number): number {
-  // Tabela IRRF 2024
-  if (salary <= 2259.20) return 0
-  if (salary <= 2826.65) return 0.075
-  if (salary <= 3751.05) return 0.15
-  if (salary <= 4664.68) return 0.225
-  return 0.275
-}
-
-function getIrrfDeduction(salary: number): number {
-  // Parcela a deduzir IRRF 2024
-  if (salary <= 2259.20) return 0
-  if (salary <= 2826.65) return 169.44
-  if (salary <= 3751.05) return 381.44
-  if (salary <= 4664.68) return 662.77
-  return 896.00
+function calculateIrrf(baseCalculo: number): { value: number; rate: number } {
+  // Tabela IRRF 2024 - Base de cálculo = Salário Bruto - INSS
+  // Faixas e parcelas a deduzir
+  const faixas = [
+    { limite: 2259.20, aliquota: 0, deducao: 0 },
+    { limite: 2826.65, aliquota: 0.075, deducao: 169.44 },
+    { limite: 3751.05, aliquota: 0.15, deducao: 381.44 },
+    { limite: 4664.68, aliquota: 0.225, deducao: 662.77 },
+    { limite: Infinity, aliquota: 0.275, deducao: 896.00 },
+  ]
+  
+  for (const faixa of faixas) {
+    if (baseCalculo <= faixa.limite) {
+      const irrf = Math.max(0, baseCalculo * faixa.aliquota - faixa.deducao)
+      const aliquotaEfetiva = baseCalculo > 0 ? (irrf / baseCalculo) * 100 : 0
+      return { value: irrf, rate: aliquotaEfetiva }
+    }
+  }
+  
+  return { value: 0, rate: 0 }
 }
 
 function getMonthName(month: number): string {

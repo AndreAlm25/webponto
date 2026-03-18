@@ -1,78 +1,86 @@
 /**
  * 05 - Advances Seed
- * Gera vales/adiantamentos em diferentes status
+ * Gera vales/adiantamentos em diferentes status para os últimos 4 meses
  * 
  * CENÁRIOS:
  * - Vale pago (descontado no holerite)
  * - Vale aprovado (aguardando pagamento)
  * - Vale pendente (aguardando aprovação)
  * - Vale rejeitado
+ * 
+ * IMPORTANTE: Vales APPROVED e PAID são descontados no holerite
  */
 
 import { PrismaClient, AdvanceStatus } from '@prisma/client'
 
-// Vales por funcionário
+// Vales por funcionário - cenários para teste de cálculo
 const EMPLOYEE_ADVANCES: Record<string, AdvanceConfig[]> = {
-  // Paulo Santos - Vale pago
-  'paulo.santos@acmetech.com.br': [
-    {
-      amount: 500,
-      status: 'PAID',
-      requestedDaysAgo: 15,
-      reason: 'Despesas médicas',
-    },
-  ],
-
-  // João da Silva - Vale aprovado aguardando
+  // João da Silva - Vale aprovado de R$ 300 (será descontado no holerite do mês atual)
   'joao.silva@acmetech.com.br': [
     {
       amount: 300,
+      type: 'EXTRA_ADVANCE',
       status: 'APPROVED',
       requestedDaysAgo: 5,
       reason: 'Emergência familiar',
     },
   ],
 
-  // Maria Souza - Vale pendente
+  // Maria Souza - Vale pendente (NÃO será descontado)
   'maria.souza@acmetech.com.br': [
     {
       amount: 200,
+      type: 'EXTRA_ADVANCE',
       status: 'PENDING',
       requestedDaysAgo: 2,
       reason: 'Conserto do carro',
     },
   ],
 
-  // Carlos Pereira - Vale rejeitado
+  // Carlos Pereira - Vale pago de R$ 500 (será descontado)
   'carlos.pereira@acmetech.com.br': [
     {
-      amount: 400,
-      status: 'REJECTED',
+      amount: 500,
+      type: 'SALARY_ADVANCE',
+      status: 'PAID',
       requestedDaysAgo: 10,
-      reason: 'Viagem pessoal',
-      rejectionReason: 'Valor excede o limite permitido',
+      reason: 'Adiantamento salarial',
     },
   ],
 
-  // Ana Oliveira - Múltiplos vales
+  // Ana Oliveira - Dois vales: um pago R$ 150 + um aprovado R$ 250 = R$ 400 total
   'ana.oliveira@acmetech.com.br': [
     {
       amount: 150,
+      type: 'EXTRA_ADVANCE',
       status: 'PAID',
-      requestedDaysAgo: 30,
+      requestedDaysAgo: 15,
       reason: 'Material escolar',
     },
     {
       amount: 250,
-      status: 'PENDING',
-      requestedDaysAgo: 1,
+      type: 'EXTRA_ADVANCE',
+      status: 'APPROVED',
+      requestedDaysAgo: 3,
       reason: 'Conta de luz',
+    },
+  ],
+
+  // Paulo Santos - Vale pago de R$ 500 (será descontado)
+  'paulo.santos@acmetech.com.br': [
+    {
+      amount: 500,
+      type: 'EXTRA_ADVANCE',
+      status: 'PAID',
+      requestedDaysAgo: 12,
+      reason: 'Despesas médicas',
     },
   ],
 }
 
 interface AdvanceConfig {
   amount: number
+  type: 'SALARY_ADVANCE' | 'EXTRA_ADVANCE'
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID' | 'CANCELLED'
   requestedDaysAgo: number
   reason?: string
@@ -142,7 +150,7 @@ export async function seedAdvances(prisma: PrismaClient): Promise<void> {
         data: {
           companyId: employee.companyId,
           employeeId: employee.id,
-          type: 'EXTRA_ADVANCE',
+          type: advanceConfig.type || 'EXTRA_ADVANCE',
           amount: advanceConfig.amount,
           referenceMonth: refDate.getMonth() + 1,
           referenceYear: refDate.getFullYear(),

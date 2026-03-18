@@ -14,7 +14,6 @@ const PAYROLL_CONFIGS: Record<string, PayrollConfigData> = {
     enableIrrf: true,
     enableFgts: true,
     enableNightShift: false,
-    enableSalaryAdvance: false,
     enableExtraAdvance: false,
     enableTransportVoucher: false,
     enableMealVoucher: false,
@@ -24,17 +23,27 @@ const PAYROLL_CONFIGS: Record<string, PayrollConfigData> = {
 
   // Acme Tech - Empresa completa (todos os benefícios)
   'Acme Tech': {
-    paymentDay1: 5,
+    // Modo de pagamento: FULL (mensal no dia 5)
+    paymentMode: 'FULL',
+    fullPaymentDay: 5,
+    
+    // Encargos
     enableInss: true,
     enableIrrf: true,
     enableFgts: true,
+    
+    // Desconto de atrasos (padrão: true = desconta)
+    enableLateDiscount: true,
+    
+    // Adicional noturno
     enableNightShift: true,
     nightShiftPercentage: 20,
-    enableSalaryAdvance: true,
-    salaryAdvanceDay: 15,
-    salaryAdvancePercentage: 40,
+    
+    // Vale avulso
     enableExtraAdvance: true,
     maxExtraAdvancePercentage: 50,
+    
+    // Benefícios
     enableTransportVoucher: true,
     transportVoucherRate: 6,
     enableMealVoucher: true,
@@ -45,23 +54,72 @@ const PAYROLL_CONFIGS: Record<string, PayrollConfigData> = {
     enableDentalInsurance: true,
     dentalInsuranceValue: 50,
   },
+
+  // Beta Solutions - Empresa com configuração diferente (SEM desconto de atrasos)
+  'Beta Solutions': {
+    // Modo de pagamento: ADVANCE (adiantamento + saldo)
+    paymentMode: 'ADVANCE',
+    advancePercent: 40,
+    advancePaymentDay: 15,
+    balancePaymentDay: 5,
+    
+    // Encargos
+    enableInss: true,
+    enableIrrf: true,
+    enableFgts: true,
+    
+    // Desconto de atrasos: DESABILITADO (registra mas não desconta)
+    enableLateDiscount: false,
+    
+    // Adicional noturno
+    enableNightShift: false,
+    
+    // Vale avulso
+    enableExtraAdvance: true,
+    maxExtraAdvancePercentage: 40,
+    
+    // Benefícios
+    enableTransportVoucher: true,
+    transportVoucherRate: 6,
+    enableMealVoucher: false,
+    enableHealthInsurance: true,
+    healthInsuranceValue: 400,
+    enableDentalInsurance: false,
+  },
 }
 
 interface PayrollConfigData {
-  paymentDay1?: number
-  paymentDay2?: number
+  // Modo de pagamento flexível
+  paymentMode?: 'FULL' | 'ADVANCE' | 'INSTALLMENTS'
+  fullPaymentDay?: number
+  advancePercent?: number
+  advancePaymentDay?: number
+  balancePaymentDay?: number
+  installmentCount?: number
+  installment1Percent?: number
+  installment1Day?: number
+  installment2Percent?: number
+  installment2Day?: number
+  
+  // Encargos
   enableInss?: boolean
   enableIrrf?: boolean
   enableFgts?: boolean
+  
+  // Desconto de atrasos
+  enableLateDiscount?: boolean
+  
+  // Adicional noturno
   enableNightShift?: boolean
   nightShiftStart?: string
   nightShiftEnd?: string
   nightShiftPercentage?: number
-  enableSalaryAdvance?: boolean
-  salaryAdvanceDay?: number
-  salaryAdvancePercentage?: number
+  
+  // Vale avulso
   enableExtraAdvance?: boolean
   maxExtraAdvancePercentage?: number
+  
+  // Benefícios
   enableTransportVoucher?: boolean
   transportVoucherRate?: number
   enableMealVoucher?: boolean
@@ -113,7 +171,6 @@ function getDefaultConfig(): PayrollConfigData {
     enableIrrf: true,
     enableFgts: true,
     enableNightShift: true,
-    enableSalaryAdvance: false,
     enableExtraAdvance: true,
     maxExtraAdvancePercentage: 30,
     enableTransportVoucher: true,
@@ -131,7 +188,6 @@ function logEnabledFeatures(companyName: string, config: PayrollConfigData): voi
   if (config.enableIrrf) features.push('IRRF')
   if (config.enableFgts) features.push('FGTS')
   if (config.enableNightShift) features.push('Noturno')
-  if (config.enableSalaryAdvance) features.push('Adiantamento')
   if (config.enableExtraAdvance) features.push('Vale Avulso')
   if (config.enableTransportVoucher) features.push('VT')
   if (config.enableMealVoucher) features.push('VR')

@@ -211,6 +211,127 @@
           "avatarImage": "images/users/paulo-santos.png"
         }
       ]
+    },
+    {
+      "cnpj": "78.654.321/0001-88",
+      "legalName": "Beta Soluções Empresariais Ltda",
+      "tradeName": "Beta Solutions",
+      "email": "contato@betasolutions.com.br",
+      "plan": "PROFESSIONAL",
+      "logoImage": "images/companies/acme-tech.png",
+      "address": {
+        "zipCode": "22041-080",
+        "street": "Avenida Atlântica",
+        "number": "1500",
+        "complement": "Sala 801",
+        "district": "Copacabana",
+        "city": "Rio de Janeiro",
+        "state": "RJ",
+        "reference": "Próximo ao Copacabana Palace"
+      },
+      "contactInfo": {
+        "phoneFixed": "(21) 3200-5000",
+        "phoneWhatsapp": "(21) 99888-5555",
+        "allowWhatsappNotifications": true
+      },
+      "user": {
+        "email": "admin@betasolutions.com.br",
+        "name": "Admin Beta",
+        "password": "123456*",
+        "role": "COMPANY_ADMIN"
+      },
+      "employees": [
+        {
+          "user": {
+            "email": "lucas.ferreira@betasolutions.com.br",
+            "name": "Lucas Ferreira",
+            "password": "123456*",
+            "role": "EMPLOYEE"
+          },
+          "employee": {
+            "registrationId": "BETA001",
+            "cpf": "11122233301",
+            "hireDate": "2024-02-01",
+            "baseSalary": "4500.00",
+            "position": "Desenvolvedor Junior",
+            "department": "Tecnologia",
+            "active": true
+          },
+          "address": {
+            "zipCode": "20040-020",
+            "street": "Rua do Ouvidor",
+            "number": "100",
+            "district": "Centro",
+            "city": "Rio de Janeiro",
+            "state": "RJ"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(21) 99111-1111",
+            "allowWhatsappNotifications": true
+          },
+          "avatarImage": "images/users/joao-silva.png"
+        },
+        {
+          "user": {
+            "email": "juliana.costa@betasolutions.com.br",
+            "name": "Juliana Costa",
+            "password": "123456*",
+            "role": "HR"
+          },
+          "employee": {
+            "registrationId": "BETA002",
+            "cpf": "22233344402",
+            "hireDate": "2023-08-15",
+            "baseSalary": "5500.00",
+            "position": "Analista de RH",
+            "department": "Recursos Humanos",
+            "active": true
+          },
+          "address": {
+            "zipCode": "22041-001",
+            "street": "Rua Barata Ribeiro",
+            "number": "500",
+            "district": "Copacabana",
+            "city": "Rio de Janeiro",
+            "state": "RJ"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(21) 99222-2222",
+            "allowWhatsappNotifications": true
+          },
+          "avatarImage": "images/users/maria-souza.jpg"
+        },
+        {
+          "user": {
+            "email": "roberto.almeida@betasolutions.com.br",
+            "name": "Roberto Almeida",
+            "password": "123456*",
+            "role": "MANAGER"
+          },
+          "employee": {
+            "registrationId": "BETA003",
+            "cpf": "33344455503",
+            "hireDate": "2022-01-10",
+            "baseSalary": "9200.00",
+            "position": "Diretor de Operações",
+            "department": "Diretoria",
+            "active": true
+          },
+          "address": {
+            "zipCode": "22450-220",
+            "street": "Rua Visconde de Pirajá",
+            "number": "330",
+            "district": "Ipanema",
+            "city": "Rio de Janeiro",
+            "state": "RJ"
+          },
+          "contactInfo": {
+            "phoneWhatsapp": "(21) 99333-3333",
+            "allowWhatsappNotifications": true
+          },
+          "avatarImage": "images/users/carlos-pereira.png"
+        }
+      ]
     }
   ]
 }

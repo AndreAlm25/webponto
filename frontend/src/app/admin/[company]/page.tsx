@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import Image from 'next/image'
 import { useWebSocket } from '@/contexts/WebSocketContext'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
@@ -48,6 +49,12 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
   const [dashboardConfig, setDashboardConfig] = useState({
     showRecentEntries: true,
     recentEntriesLimit: 10,
+    showTotalEmployees: true,
+    showTodayEntries: true,
+    showFacialRecognition: true,
+    showRemoteClock: true,
+    showOvertime: true,
+    showAlerts: true,
   })
   const { onTimeEntryCreated, onTimeEntryUpdated, onTimeEntryDeleted, onDashboardConfigUpdated } = useWebSocket()
   
@@ -219,8 +226,14 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
         if (res.ok) {
           const data = await res.json()
           setDashboardConfig({
-            showRecentEntries: data.dashboardShowRecentEntries,
-            recentEntriesLimit: data.dashboardRecentEntriesLimit,
+            showRecentEntries: data.dashboardShowRecentEntries ?? true,
+            recentEntriesLimit: data.dashboardRecentEntriesLimit ?? 10,
+            showTotalEmployees: data.dashboardShowTotalEmployees ?? true,
+            showTodayEntries: data.dashboardShowTodayEntries ?? true,
+            showFacialRecognition: data.dashboardShowFacialRecognition ?? true,
+            showRemoteClock: data.dashboardShowRemoteClock ?? true,
+            showOvertime: data.dashboardShowOvertime ?? true,
+            showAlerts: data.dashboardShowAlerts ?? true,
           })
         }
       } catch (error) {
@@ -287,8 +300,14 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
     const unsubscribeConfig = onDashboardConfigUpdated((config: any) => {
       console.log('⚙️ [WebSocket Dashboard] Configuração atualizada:', config)
       setDashboardConfig({
-        showRecentEntries: config.dashboardShowRecentEntries,
-        recentEntriesLimit: config.dashboardRecentEntriesLimit,
+        showRecentEntries: config.dashboardShowRecentEntries ?? true,
+        recentEntriesLimit: config.dashboardRecentEntriesLimit ?? 10,
+        showTotalEmployees: config.dashboardShowTotalEmployees ?? true,
+        showTodayEntries: config.dashboardShowTodayEntries ?? true,
+        showFacialRecognition: config.dashboardShowFacialRecognition ?? true,
+        showRemoteClock: config.dashboardShowRemoteClock ?? true,
+        showOvertime: config.dashboardShowOvertime ?? true,
+        showAlerts: config.dashboardShowAlerts ?? true,
       })
       // Se mudou o limite, recarregar registros
       if (config.dashboardRecentEntriesLimit !== dashboardConfig.recentEntriesLimit) {
@@ -311,65 +330,72 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
 
   return (
     <ProtectedPage permission={PERMISSIONS.DASHBOARD_VIEW}>
-      <div className="mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10 text-primary">
-            <LayoutDashboard className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-muted-foreground">Visão geral do sistema</p>
-          </div>
-        </div>
-      </div>
+      <PageContainer>
+        <PageHeader
+          title="Dashboard"
+          description="Visão geral do sistema"
+          icon={<LayoutDashboard className="h-6 w-6" />}
+        />
 
-      <div className={`grid grid-cols-1 gap-6 ${dashboardConfig.showRecentEntries ? 'lg:grid-cols-3' : ''}`}>
+        <div className={`mt-6 grid grid-cols-1 gap-4 md:gap-6 ${dashboardConfig.showRecentEntries ? 'lg:grid-cols-3' : ''}`}>
         {/* Cards principais - 2 colunas */}
         <div className={`space-y-6 ${dashboardConfig.showRecentEntries ? 'lg:col-span-2' : ''}`}>
-          {/* Grid de 6 cards (3x2) */}
+          {/* Grid de cards - dinâmico baseado nas configurações */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <StatCard 
-              title="Total Funcionários" 
-              icon={<Users className="h-5 w-5" />} 
-              value={loadingStats ? '—' : stats.totalEmployees.toString()} 
-              subtitle={`${stats.activeEmployees} Ativos`}
-              color="blue"
-            />
-            <StatCard 
-              title="Registros Hoje" 
-              icon={<Clock className="h-5 w-5" />} 
-              value={loadingStats ? '—' : stats.todayEntries.toString()} 
-              subtitle="Últimas 24h" 
-              color="green"
-            />
-            <StatCard 
-              title="Com Reconhecimento" 
-              icon={<Camera className="h-5 w-5" />} 
-              value={loadingStats ? '—' : stats.facialRecognitionEnabled.toString()} 
-              subtitle="Facial ativo" 
-              color="purple"
-            />
-            <StatCard 
-              title="Ponto Remoto" 
-              icon={<MapPin className="h-5 w-5" />} 
-              value={(user as any)?.company?.allowRemoteClockIn ? 'Ativo' : 'Inativo'} 
-              subtitle="Configuração" 
-              color="orange"
-            />
-            <StatCard 
-              title="Hora Extra" 
-              icon={<TrendingUp className="h-5 w-5" />} 
-              value={loadingStats ? '—' : stats.pendingOvertime.toString()} 
-              subtitle="Pendentes" 
-              color="yellow"
-            />
-            <StatCard 
-              title="Alertas" 
-              icon={<AlertCircle className="h-5 w-5" />} 
-              value={loadingStats ? '—' : stats.alerts.toString()} 
-              subtitle="Requer atenção" 
-              color="red"
-            />
+            {dashboardConfig.showTotalEmployees && (
+              <StatCard 
+                title="Total Funcionários" 
+                icon={<Users className="h-5 w-5" />} 
+                value={loadingStats ? '—' : stats.totalEmployees.toString()} 
+                subtitle={`${stats.activeEmployees} Ativos`}
+                color="blue"
+              />
+            )}
+            {dashboardConfig.showTodayEntries && (
+              <StatCard 
+                title="Registros Hoje" 
+                icon={<Clock className="h-5 w-5" />} 
+                value={loadingStats ? '—' : stats.todayEntries.toString()} 
+                subtitle="Últimas 24h" 
+                color="green"
+              />
+            )}
+            {dashboardConfig.showFacialRecognition && (
+              <StatCard 
+                title="Com Reconhecimento" 
+                icon={<Camera className="h-5 w-5" />} 
+                value={loadingStats ? '—' : stats.facialRecognitionEnabled.toString()} 
+                subtitle="Facial ativo" 
+                color="purple"
+              />
+            )}
+            {dashboardConfig.showRemoteClock && (
+              <StatCard 
+                title="Ponto Remoto" 
+                icon={<MapPin className="h-5 w-5" />} 
+                value={(user as any)?.company?.allowRemoteClockIn ? 'Ativo' : 'Inativo'} 
+                subtitle="Configuração" 
+                color="orange"
+              />
+            )}
+            {dashboardConfig.showOvertime && (
+              <StatCard 
+                title="Hora Extra" 
+                icon={<TrendingUp className="h-5 w-5" />} 
+                value={loadingStats ? '—' : stats.pendingOvertime.toString()} 
+                subtitle="Pendentes" 
+                color="yellow"
+              />
+            )}
+            {dashboardConfig.showAlerts && (
+              <StatCard 
+                title="Alertas" 
+                icon={<AlertCircle className="h-5 w-5" />} 
+                value={loadingStats ? '—' : stats.alerts.toString()} 
+                subtitle="Requer atenção" 
+                color="red"
+              />
+            )}
           </section>
         </div>
 
@@ -474,7 +500,8 @@ export default function CompanyAdminSlugPage({ params }: { params: { company: st
           </div>
         </div>
         )}
-      </div>
+        </div>
+      </PageContainer>
     </ProtectedPage>
   )
 }

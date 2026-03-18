@@ -48,16 +48,33 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
     allowFacialRecognition: false,
     requireLiveness: false,
     geofenceId: '' as string | null,
-    lateToleranceMinutes: 15,
     allowOvertime: false,
     allowOvertimeBefore: false,
     maxOvertimeBefore: 120,
     allowOvertimeAfter: false,
     maxOvertimeAfter: 180,
-    toleranceMinutes: 10,
     allowTimeBank: false,
     minRestHours: 11,
     warnOnRestViolation: true,
+    // Escala de trabalho
+    workSchedule: 'FIVE_TWO',
+    customWorkDaysPerMonth: null as number | null,
+    // Benefícios individuais
+    useCustomBenefits: false,
+    transportVoucherEnabled: null as boolean | null,
+    transportVoucherRate: null as number | null,
+    mealVoucherEnabled: null as boolean | null,
+    mealVoucherValue: null as number | null,
+    mealVoucherDiscount: null as number | null,
+    healthInsuranceEnabled: null as boolean | null,
+    healthInsuranceValue: null as number | null,
+    dentalInsuranceEnabled: null as boolean | null,
+    dentalInsuranceValue: null as number | null,
+    // Datas de pagamento personalizadas
+    customPaymentDay1: null as number | null,
+    customPaymentDay2: null as number | null,
+    customPaymentDay3: null as number | null,
+    customPaymentDay4: null as number | null,
   })
   
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -69,18 +86,12 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
   const [geofences, setGeofences] = useState<{id: string, name: string, radiusMeters?: number}[]>([])
   const [initialData, setInitialData] = useState<any>(null)
   const [hasChanges, setHasChanges] = useState(false)
+  const [payrollConfig, setPayrollConfig] = useState<{
+    paymentMode: string
+    installmentCount: number
+  } | null>(null)
 
   const api = process.env.NEXT_PUBLIC_API_URL
-
-  // Comentário: Carregar dados do funcionário ao abrir modal
-  useEffect(() => {
-    if (isOpen && employeeId) {
-      loadEmployeeData()
-      loadPositions()
-      loadDepartments()
-      loadGeofences()
-    }
-  }, [isOpen, employeeId])
 
   // Comentário: Detectar mudanças nos dados
   useEffect(() => {
@@ -99,17 +110,18 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
       setLoadingData(true)
       const token = localStorage.getItem('token')
       
-      // Buscar lista de funcionários para encontrar o específico
-      const res = await fetch(`${api}/api/employees?companyId=${companyId}`, {
+      // Buscar funcionário diretamente por ID
+      const res = await fetch(`${api}/api/employees/${employeeId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 
-      if (!res.ok) throw new Error('Erro ao buscar funcionários')
+      if (!res.ok) throw new Error('Erro ao buscar funcionário')
 
-      const employees = await res.json()
-      const employee = employees.find((emp: any) => emp.id === employeeId)
+      const employee = await res.json()
 
-      if (!employee) throw new Error('Funcionário não encontrado')
+      if (!employee || employee.success === false) {
+        throw new Error(employee?.message || 'Funcionário não encontrado')
+      }
 
       console.log('[EditEmployeeModal] Funcionário encontrado:', employee)
       console.log('[EditEmployeeModal] User data:', employee.user)
@@ -137,16 +149,33 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
         allowFacialRecognition: employee.allowFacialRecognition || false,
         requireLiveness: employee.requireLiveness || false,
         geofenceId: employee.geofenceId || '',
-        lateToleranceMinutes: employee.lateToleranceMinutes || 15,
         allowOvertime: employee.allowOvertime || false,
         allowOvertimeBefore: employee.allowOvertimeBefore || false,
         maxOvertimeBefore: employee.maxOvertimeBefore || 120,
         allowOvertimeAfter: employee.allowOvertimeAfter || false,
         maxOvertimeAfter: employee.maxOvertimeAfter || 180,
-        toleranceMinutes: employee.toleranceMinutes || 10,
         allowTimeBank: employee.allowTimeBank || false,
         minRestHours: employee.minRestHours || 11,
         warnOnRestViolation: employee.warnOnRestViolation !== false,
+        // Escala de trabalho
+        workSchedule: employee.workSchedule || 'FIVE_TWO',
+        customWorkDaysPerMonth: employee.customWorkDaysPerMonth || null,
+        // Benefícios individuais
+        useCustomBenefits: employee.useCustomBenefits || false,
+        transportVoucherEnabled: employee.transportVoucherEnabled ?? null,
+        transportVoucherRate: employee.transportVoucherRate ? Number(employee.transportVoucherRate) : null,
+        mealVoucherEnabled: employee.mealVoucherEnabled ?? null,
+        mealVoucherValue: employee.mealVoucherValue ? Number(employee.mealVoucherValue) : null,
+        mealVoucherDiscount: employee.mealVoucherDiscount ? Number(employee.mealVoucherDiscount) : null,
+        healthInsuranceEnabled: employee.healthInsuranceEnabled ?? null,
+        healthInsuranceValue: employee.healthInsuranceValue ? Number(employee.healthInsuranceValue) : null,
+        dentalInsuranceEnabled: employee.dentalInsuranceEnabled ?? null,
+        dentalInsuranceValue: employee.dentalInsuranceValue ? Number(employee.dentalInsuranceValue) : null,
+        // Datas de pagamento personalizadas
+        customPaymentDay1: employee.customPaymentDay1 ?? null,
+        customPaymentDay2: employee.customPaymentDay2 ?? null,
+        customPaymentDay3: employee.customPaymentDay3 ?? null,
+        customPaymentDay4: employee.customPaymentDay4 ?? null,
       }
 
       setFormData(initialFormData)
@@ -212,6 +241,36 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
       console.error('[EditEmployeeModal] Erro ao carregar cercas:', e)
     }
   }
+
+  // Comentário: Carregar configuração de pagamento da empresa
+  const loadPayrollConfig = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${api}/api/payroll/config?companyId=${companyId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setPayrollConfig({
+          paymentMode: data.config?.paymentMode || 'FULL',
+          installmentCount: data.config?.installmentCount || 1,
+        })
+      }
+    } catch (e) {
+      console.error('[EditEmployeeModal] Erro ao carregar config de pagamento:', e)
+    }
+  }
+
+  // Comentário: Carregar dados do funcionário ao abrir modal
+  useEffect(() => {
+    if (isOpen && employeeId) {
+      loadEmployeeData()
+      loadPositions()
+      loadDepartments()
+      loadGeofences()
+      loadPayrollConfig()
+    }
+  }, [isOpen, employeeId])
 
   // Comentário: Adicionar novo cargo
   const addNewPosition = async (name: string) => {
@@ -297,7 +356,7 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
     if (!formData.name) missing.push('Nome')
     if (!formData.email) missing.push('Email')
     if (!formData.registrationId) missing.push('Matrícula')
-    if (!formData.hireDate) missing.push('Data de início')
+    if (!formData.hireDate) missing.push('Data de Admissão')
     if (!formData.salary) missing.push('Salário')
     if (!formData.workStartTime) missing.push('Horário de Início')
     if (!formData.workEndTime) missing.push('Horário de Fim')
@@ -349,16 +408,28 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
         allowRemoteClockIn: formData.allowRemoteClockIn,
         allowFacialRecognition: formData.allowFacialRecognition,
         requireLiveness: formData.requireLiveness,
-        lateToleranceMinutes: formData.lateToleranceMinutes,
         allowOvertime: formData.allowOvertime,
         allowOvertimeBefore: formData.allowOvertimeBefore,
         maxOvertimeBefore: formData.maxOvertimeBefore,
         allowOvertimeAfter: formData.allowOvertimeAfter,
         maxOvertimeAfter: formData.maxOvertimeAfter,
-        toleranceMinutes: formData.toleranceMinutes,
         allowTimeBank: formData.allowTimeBank,
         minRestHours: formData.minRestHours,
         warnOnRestViolation: formData.warnOnRestViolation,
+        // Escala de trabalho
+        workSchedule: formData.workSchedule,
+        customWorkDaysPerMonth: formData.customWorkDaysPerMonth,
+        // Benefícios individuais
+        useCustomBenefits: formData.useCustomBenefits,
+        transportVoucherEnabled: formData.transportVoucherEnabled,
+        transportVoucherRate: formData.transportVoucherRate,
+        mealVoucherEnabled: formData.mealVoucherEnabled,
+        mealVoucherValue: formData.mealVoucherValue,
+        mealVoucherDiscount: formData.mealVoucherDiscount,
+        healthInsuranceEnabled: formData.healthInsuranceEnabled,
+        healthInsuranceValue: formData.healthInsuranceValue,
+        dentalInsuranceEnabled: formData.dentalInsuranceEnabled,
+        dentalInsuranceValue: formData.dentalInsuranceValue,
       }
       
       const res = await fetch(`${api}/api/employees/${employeeId}`, {
@@ -574,7 +645,7 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
                       name="hireDate"
                       type="date"
                       icon={<Calendar className="h-4 w-4" />}
-                      label="Data de Início"
+                      label="Data de Admissão *"
                       value={formData.hireDate}
                       onChange={handleChange}
                       required
@@ -636,27 +707,386 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
                     </div>
                   )}
 
-                  {/* Tolerância de Atraso */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <InputWithIcon
-                      id="lateToleranceMinutes"
-                      name="lateToleranceMinutes"
-                      type="number"
-                      min="0"
-                      max="60"
-                      icon={<Clock className="h-4 w-4" />}
-                      label="Tolerância de Atraso (minutos)"
-                      placeholder="15"
-                      value={formData.lateToleranceMinutes}
-                      onChange={handleChange}
-                    />
-                    <div className="flex items-end">
-                      <p className="text-xs text-muted-foreground">
-                        CLT recomenda até 10 minutos. Padrão: 15 minutos.
-                      </p>
+                  {/* Escala de Trabalho */}
+                  <div className="grid md:grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <Label className="text-sm">Escala de Trabalho</Label>
+                      <Select
+                        value={formData.workSchedule}
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, workSchedule: value }))}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Selecione a escala" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="FIVE_TWO">5x2 - Segunda a Sexta (22 dias/mês)</SelectItem>
+                          <SelectItem value="SIX_ONE">6x1 - Segunda a Sábado (26 dias/mês)</SelectItem>
+                          <SelectItem value="TWELVE_THIRTYSIX">12x36 - 12h trabalha, 36h folga (~15 dias/mês)</SelectItem>
+                          <SelectItem value="FOUR_TWO">4x2 - 4 dias trabalha, 2 folga (~20 dias/mês)</SelectItem>
+                          <SelectItem value="CUSTOM">Personalizado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {formData.workSchedule === 'CUSTOM' && (
+                      <div>
+                        <Label className="text-sm">Dias Trabalhados/Mês</Label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={formData.customWorkDaysPerMonth || ''}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            customWorkDaysPerMonth: e.target.value ? parseInt(e.target.value) : null 
+                          }))}
+                          className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                          placeholder="Ex: 22"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Benefícios Individuais */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                    Benefícios Individuais
+                  </h3>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    Ative para sobrescrever os valores padrão da empresa para este funcionário.
+                  </p>
+
+                  <CheckboxWithIcon
+                    icon={<DollarSign className="h-4 w-4" />}
+                    label="Usar Benefícios Personalizados"
+                    description="Sobrescrever configurações de benefícios da empresa"
+                    checked={formData.useCustomBenefits}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, useCustomBenefits: checked as boolean }))
+                    }
+                  />
+
+                  {formData.useCustomBenefits && (
+                    <div className="space-y-4 pl-8 border-l-2 border-primary/20">
+                      {/* Vale-Transporte */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.transportVoucherEnabled === true}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              transportVoucherEnabled: e.target.checked ? true : false 
+                            }))}
+                            className="h-4 w-4"
+                          />
+                          <Label className="text-sm font-medium">Vale-Transporte</Label>
+                        </div>
+                        {formData.transportVoucherEnabled && (
+                          <div className="pl-6">
+                            <Label className="text-xs">% Desconto</Label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              value={formData.transportVoucherRate || ''}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                transportVoucherRate: e.target.value ? parseFloat(e.target.value) : null 
+                              }))}
+                              className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                              placeholder="Ex: 6"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Vale-Refeição */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.mealVoucherEnabled === true}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              mealVoucherEnabled: e.target.checked ? true : false 
+                            }))}
+                            className="h-4 w-4"
+                          />
+                          <Label className="text-sm font-medium">Vale-Refeição</Label>
+                        </div>
+                        {formData.mealVoucherEnabled && (
+                          <div className="pl-6 grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs">Valor (R$)</Label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={formData.mealVoucherValue || ''}
+                                onChange={(e) => setFormData(prev => ({ 
+                                  ...prev, 
+                                  mealVoucherValue: e.target.value ? parseFloat(e.target.value) : null 
+                                }))}
+                                className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                                placeholder="Ex: 200"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">% Desconto</Label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={formData.mealVoucherDiscount || ''}
+                                onChange={(e) => setFormData(prev => ({ 
+                                  ...prev, 
+                                  mealVoucherDiscount: e.target.value ? parseFloat(e.target.value) : null 
+                                }))}
+                                className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                                placeholder="Ex: 20"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Plano de Saúde */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.healthInsuranceEnabled === true}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              healthInsuranceEnabled: e.target.checked ? true : false 
+                            }))}
+                            className="h-4 w-4"
+                          />
+                          <Label className="text-sm font-medium">Plano de Saúde</Label>
+                        </div>
+                        {formData.healthInsuranceEnabled && (
+                          <div className="pl-6">
+                            <Label className="text-xs">Valor Desconto (R$)</Label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={formData.healthInsuranceValue || ''}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                healthInsuranceValue: e.target.value ? parseFloat(e.target.value) : null 
+                              }))}
+                              className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                              placeholder="Ex: 350"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Plano Odontológico */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.dentalInsuranceEnabled === true}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              dentalInsuranceEnabled: e.target.checked ? true : false 
+                            }))}
+                            className="h-4 w-4"
+                          />
+                          <Label className="text-sm font-medium">Plano Odontológico</Label>
+                        </div>
+                        {formData.dentalInsuranceEnabled && (
+                          <div className="pl-6">
+                            <Label className="text-xs">Valor Desconto (R$)</Label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={formData.dentalInsuranceValue || ''}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                dentalInsuranceValue: e.target.value ? parseFloat(e.target.value) : null 
+                              }))}
+                              className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                              placeholder="Ex: 50"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Datas de Pagamento Personalizadas - Só mostra se modo for INSTALLMENTS */}
+                {payrollConfig && payrollConfig.paymentMode === 'INSTALLMENTS' && payrollConfig.installmentCount > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                      Datas de Pagamento Personalizadas
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Deixe vazio para usar as datas padrão da empresa ({payrollConfig.installmentCount} parcela{payrollConfig.installmentCount > 1 ? 's' : ''}).
+                    </p>
+                    
+                    <div className={`grid gap-3 ${
+                      payrollConfig.installmentCount === 1 ? 'grid-cols-1' :
+                      payrollConfig.installmentCount === 2 ? 'grid-cols-2' :
+                      payrollConfig.installmentCount === 3 ? 'grid-cols-3' :
+                      'grid-cols-2 md:grid-cols-4'
+                    }`}>
+                      {payrollConfig.installmentCount >= 1 && (
+                        <div>
+                          <Label className="text-xs">Parcela 1 (Dia)</Label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={formData.customPaymentDay1 || ''}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              customPaymentDay1: e.target.value ? parseInt(e.target.value) : null 
+                            }))}
+                            className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                            placeholder="Padrão"
+                          />
+                        </div>
+                      )}
+                      {payrollConfig.installmentCount >= 2 && (
+                        <div>
+                          <Label className="text-xs">Parcela 2 (Dia)</Label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={formData.customPaymentDay2 || ''}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              customPaymentDay2: e.target.value ? parseInt(e.target.value) : null 
+                            }))}
+                            className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                            placeholder="Padrão"
+                          />
+                        </div>
+                      )}
+                      {payrollConfig.installmentCount >= 3 && (
+                        <div>
+                          <Label className="text-xs">Parcela 3 (Dia)</Label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={formData.customPaymentDay3 || ''}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              customPaymentDay3: e.target.value ? parseInt(e.target.value) : null 
+                            }))}
+                            className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                            placeholder="Padrão"
+                          />
+                        </div>
+                      )}
+                      {payrollConfig.installmentCount >= 4 && (
+                        <div>
+                          <Label className="text-xs">Parcela 4 (Dia)</Label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={formData.customPaymentDay4 || ''}
+                            onChange={(e) => setFormData(prev => ({ 
+                              ...prev, 
+                              customPaymentDay4: e.target.value ? parseInt(e.target.value) : null 
+                            }))}
+                            className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                            placeholder="Padrão"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                )}
+                
+                {/* Modo Adiantamento - Mostrar campos de adiantamento e saldo */}
+                {payrollConfig && payrollConfig.paymentMode === 'ADVANCE' && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                      Datas de Pagamento Personalizadas
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Deixe vazio para usar as datas padrão da empresa (Adiantamento + Saldo).
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs">Adiantamento (Dia)</Label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={formData.customPaymentDay1 || ''}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            customPaymentDay1: e.target.value ? parseInt(e.target.value) : null 
+                          }))}
+                          className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                          placeholder="Padrão"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Saldo (Dia)</Label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={formData.customPaymentDay2 || ''}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            customPaymentDay2: e.target.value ? parseInt(e.target.value) : null 
+                          }))}
+                          className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                          placeholder="Padrão"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Modo Pagamento Único - Mostrar apenas 1 campo */}
+                {payrollConfig && payrollConfig.paymentMode === 'FULL' && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                      Data de Pagamento Personalizada
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Deixe vazio para usar a data padrão da empresa (Pagamento único mensal).
+                    </p>
+                    
+                    <div className="grid grid-cols-1 max-w-xs">
+                      <div>
+                        <Label className="text-xs">Dia do Pagamento</Label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={formData.customPaymentDay1 || ''}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            customPaymentDay1: e.target.value ? parseInt(e.target.value) : null 
+                          }))}
+                          className="w-full mt-1 px-3 py-2 border border-border rounded-md bg-background text-sm"
+                          placeholder="Padrão"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Permissões e Configurações */}
                 <div className="space-y-4">
@@ -815,22 +1245,6 @@ export default function EditEmployeeModal({ isOpen, onClose, onEmployeeUpdated, 
                               </p>
                             </div>
                           )}
-                        </div>
-
-                        {/* Tolerância */}
-                        <div className="space-y-2">
-                          <Label className="text-sm">Tolerância para Hora Extra (minutos)</Label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="60"
-                            value={formData.toleranceMinutes}
-                            onChange={(e) => setFormData(prev => ({ ...prev, toleranceMinutes: parseInt(e.target.value) || 0 }))}
-                            className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm"
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Minutos dentro da tolerância não contam como hora extra (padrão: 10min)
-                          </p>
                         </div>
 
                         {/* Banco de Horas */}

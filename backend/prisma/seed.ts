@@ -63,8 +63,6 @@ async function main() {
       workEndTime: '18:00',
       active: true,
       allowRemoteClockIn: true,
-      requireGeolocation: true,
-      minGeoAccuracyMeters: 50,
     },
   })
 

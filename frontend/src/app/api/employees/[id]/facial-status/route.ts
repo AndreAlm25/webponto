@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id } = params
-    const backendUrl = process.env.BACKEND_URL || 'http://backend:4000'
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000'
 
     const response = await fetch(`${backendUrl}/api/employees/${id}/facial-status`, {
       method: 'GET',

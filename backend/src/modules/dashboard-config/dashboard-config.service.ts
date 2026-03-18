@@ -17,6 +17,12 @@ export class DashboardConfigService {
         id: true,
         dashboardShowRecentEntries: true,
         dashboardRecentEntriesLimit: true,
+        dashboardShowTotalEmployees: true,
+        dashboardShowTodayEntries: true,
+        dashboardShowFacialRecognition: true,
+        dashboardShowRemoteClock: true,
+        dashboardShowOvertime: true,
+        dashboardShowAlerts: true,
       },
     });
 
@@ -32,6 +38,12 @@ export class DashboardConfigService {
     companyId: string;
     dashboardShowRecentEntries?: boolean;
     dashboardRecentEntriesLimit?: number;
+    dashboardShowTotalEmployees?: boolean;
+    dashboardShowTodayEntries?: boolean;
+    dashboardShowFacialRecognition?: boolean;
+    dashboardShowRemoteClock?: boolean;
+    dashboardShowOvertime?: boolean;
+    dashboardShowAlerts?: boolean;
   }) {
     const { companyId, ...updateData } = data;
 
@@ -63,6 +75,12 @@ export class DashboardConfigService {
         id: true,
         dashboardShowRecentEntries: true,
         dashboardRecentEntriesLimit: true,
+        dashboardShowTotalEmployees: true,
+        dashboardShowTodayEntries: true,
+        dashboardShowFacialRecognition: true,
+        dashboardShowRemoteClock: true,
+        dashboardShowOvertime: true,
+        dashboardShowAlerts: true,
       },
     });
 

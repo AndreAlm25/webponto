@@ -5,6 +5,7 @@ import { notFound, useRouter } from 'next/navigation'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -330,20 +331,23 @@ export default function AdvancesPage({ params }: { params: { company: string } }
   return (
     <ProtectedPage permission={PERMISSIONS.ADVANCES_VIEW} redirectTo={`/admin/${company}`}>
       {(loading || isLoading) ? (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       ) : (
-      <div className="min-h-screen bg-background">
+      <PageContainer>
         <PageHeader
           title="Gestão de Vales"
+          description="Gerencie adiantamentos e vales dos funcionários"
+          icon={<Wallet className="h-6 w-6" />}
           breadcrumbs={[
-            { label: 'Dashboard', href: base, permission: PERMISSIONS.DASHBOARD_VIEW },
+            { label: 'Admin', href: base },
+            { label: 'G. de Colaboradores' },
             { label: 'Vales' },
           ]}
         />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mt-6">
         {/* Cards de estatísticas */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-card border border-border rounded-lg p-4">
@@ -627,7 +631,6 @@ export default function AdvancesPage({ params }: { params: { company: string } }
             </table>
           </div>
         </div>
-      </main>
 
       {/* Modal de novo vale */}
       {showNewModal && (
@@ -741,6 +744,7 @@ export default function AdvancesPage({ params }: { params: { company: string } }
         </div>
       )}
       </div>
+      </PageContainer>
       )}
     </ProtectedPage>
   )

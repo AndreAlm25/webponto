@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import PageHeader from '@/components/admin/PageHeader'
-import { LayoutDashboard, Save, Eye, EyeOff } from 'lucide-react'
+import PageContainer from '@/components/admin/PageContainer'
+import { LayoutDashboard, Save, Eye, EyeOff, Users, Clock, Scan, MapPin, ClockAlert, Bell } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { toast } from 'sonner'
@@ -13,6 +14,12 @@ import { PERMISSIONS } from '@/hooks/usePermissions'
 interface DashboardConfig {
   dashboardShowRecentEntries: boolean
   dashboardRecentEntriesLimit: number
+  dashboardShowTotalEmployees: boolean
+  dashboardShowTodayEntries: boolean
+  dashboardShowFacialRecognition: boolean
+  dashboardShowRemoteClock: boolean
+  dashboardShowOvertime: boolean
+  dashboardShowAlerts: boolean
 }
 
 export default function DashboardConfigPage() {
@@ -27,6 +34,12 @@ export default function DashboardConfigPage() {
   const [config, setConfig] = useState<DashboardConfig>({
     dashboardShowRecentEntries: true,
     dashboardRecentEntriesLimit: 10,
+    dashboardShowTotalEmployees: true,
+    dashboardShowTodayEntries: true,
+    dashboardShowFacialRecognition: true,
+    dashboardShowRemoteClock: true,
+    dashboardShowOvertime: true,
+    dashboardShowAlerts: true,
   })
 
   const [loading, setLoading] = useState(true)
@@ -48,8 +61,14 @@ export default function DashboardConfigPage() {
         if (res.ok) {
           const data = await res.json()
           setConfig({
-            dashboardShowRecentEntries: data.dashboardShowRecentEntries,
-            dashboardRecentEntriesLimit: data.dashboardRecentEntriesLimit,
+            dashboardShowRecentEntries: data.dashboardShowRecentEntries ?? true,
+            dashboardRecentEntriesLimit: data.dashboardRecentEntriesLimit ?? 10,
+            dashboardShowTotalEmployees: data.dashboardShowTotalEmployees ?? true,
+            dashboardShowTodayEntries: data.dashboardShowTodayEntries ?? true,
+            dashboardShowFacialRecognition: data.dashboardShowFacialRecognition ?? true,
+            dashboardShowRemoteClock: data.dashboardShowRemoteClock ?? true,
+            dashboardShowOvertime: data.dashboardShowOvertime ?? true,
+            dashboardShowAlerts: data.dashboardShowAlerts ?? true,
           })
         } else {
           const errorData = await res.json()
@@ -114,18 +133,19 @@ export default function DashboardConfigPage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.SETTINGS_VIEW}>
-      <PageHeader
-        icon={<LayoutDashboard className="h-6 w-6" />}
-        title="Configurações do Dashboard"
-        description="Configure a exibição e comportamento do dashboard principal"
-        breadcrumbs={[
-          { label: 'Admin', href: base },
-          { label: 'Config. da Empresa' },
-          { label: 'Dashboard' },
-        ]}
-      />
+      <PageContainer>
+        <PageHeader
+          icon={<LayoutDashboard className="h-6 w-6" />}
+          title="Configurações do Dashboard"
+          description="Configure a exibição e comportamento do dashboard principal"
+          breadcrumbs={[
+            { label: 'Admin', href: base },
+            { label: 'Configurações' },
+            { label: 'Dashboard' },
+          ]}
+        />
 
-      <div className="max-w-4xl space-y-6">
+        <div className="mt-6 space-y-6">
         {/* Card de Registros Recentes */}
         <div className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center gap-3 mb-6">
@@ -218,6 +238,125 @@ export default function DashboardConfigPage() {
           </div>
         </div>
 
+        {/* Card de Visibilidade dos Cards */}
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <Eye className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Cards do Dashboard</h2>
+              <p className="text-sm text-muted-foreground">
+                Escolha quais cards serão exibidos no dashboard
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Total de Funcionários */}
+            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-blue-500" />
+                <div>
+                  <Label className="text-sm font-medium">Total de Funcionários</Label>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfig(prev => ({ ...prev, dashboardShowTotalEmployees: !prev.dashboardShowTotalEmployees }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.dashboardShowTotalEmployees ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.dashboardShowTotalEmployees ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            {/* Registros Hoje */}
+            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-green-500" />
+                <div>
+                  <Label className="text-sm font-medium">Registros Hoje</Label>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfig(prev => ({ ...prev, dashboardShowTodayEntries: !prev.dashboardShowTodayEntries }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.dashboardShowTodayEntries ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.dashboardShowTodayEntries ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            {/* Reconhecimento Facial */}
+            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Scan className="h-5 w-5 text-purple-500" />
+                <div>
+                  <Label className="text-sm font-medium">Com Reconhecimento Facial</Label>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfig(prev => ({ ...prev, dashboardShowFacialRecognition: !prev.dashboardShowFacialRecognition }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.dashboardShowFacialRecognition ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.dashboardShowFacialRecognition ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            {/* Ponto Remoto */}
+            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3">
+                <MapPin className="h-5 w-5 text-orange-500" />
+                <div>
+                  <Label className="text-sm font-medium">Ponto Remoto</Label>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfig(prev => ({ ...prev, dashboardShowRemoteClock: !prev.dashboardShowRemoteClock }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.dashboardShowRemoteClock ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.dashboardShowRemoteClock ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            {/* Hora Extra */}
+            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3">
+                <ClockAlert className="h-5 w-5 text-yellow-500" />
+                <div>
+                  <Label className="text-sm font-medium">Hora Extra</Label>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfig(prev => ({ ...prev, dashboardShowOvertime: !prev.dashboardShowOvertime }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.dashboardShowOvertime ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.dashboardShowOvertime ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            {/* Alertas */}
+            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Bell className="h-5 w-5 text-red-500" />
+                <div>
+                  <Label className="text-sm font-medium">Alertas</Label>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfig(prev => ({ ...prev, dashboardShowAlerts: !prev.dashboardShowAlerts }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.dashboardShowAlerts ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.dashboardShowAlerts ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Botão Salvar */}
         <div className="flex justify-end">
           <button
@@ -229,7 +368,8 @@ export default function DashboardConfigPage() {
             {saving ? 'Salvando...' : 'Salvar Configurações'}
           </button>
         </div>
-      </div>
+        </div>
+      </PageContainer>
     </ProtectedPage>
   )
 }

@@ -2,7 +2,7 @@
 // Sidebar do Admin (código em inglês; textos em português)
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Scale, ClockIcon, TrendingUp, List, Monitor, Wallet, Shield, FileSearch } from 'lucide-react'
+import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Scale, ClockIcon, TrendingUp, List, Monitor, Wallet, Shield, FileSearch, Calendar, Stethoscope, Palmtree } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 
@@ -135,18 +135,29 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               )}
             </button>
           
-            {/* Submenu normal (sidebar aberta) */}
+            {/* Submenu normal (sidebar aberta) - ordem alfabética */}
             {isMenuExpanded('analises') && !collapsed && (
               <div className="ml-6 border-l border-border space-y-1">
-                {hasPermission(PERMISSIONS.TIME_ENTRIES_VIEW) && (
+                {hasPermission(PERMISSIONS.COMPLIANCE_VIEW) && (
                   <button
-                    onClick={() => router.push(`${base}/analises/registros`)}
+                    onClick={() => router.push(`${base}/analises/conformidade-clt`)}
                     className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                      isActive(`${base}/analises/registros`) ? 'bg-muted/50 font-medium' : ''
+                      isActive(`${base}/analises/conformidade-clt`) ? 'bg-muted/50 font-medium' : ''
                     }`}
                   >
-                    <List className="h-3 w-3 mr-2" />
-                    <span>Registros</span>
+                    <Scale className="h-3 w-3 mr-2" />
+                    <span>Conformidade CLT</span>
+                  </button>
+                )}
+                {hasPermission(PERMISSIONS.TIME_ENTRIES_VIEW) && (
+                  <button
+                    onClick={() => router.push(`${base}/espelho-ponto`)}
+                    className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                      isActive(`${base}/espelho-ponto`) ? 'bg-muted/50 font-medium' : ''
+                    }`}
+                  >
+                    <FileText className="h-3 w-3 mr-2" />
+                    <span>Espelho de Ponto</span>
                   </button>
                 )}
                 {hasPermission(PERMISSIONS.OVERTIME_VIEW) && (
@@ -167,21 +178,21 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                     </div>
                   </button>
                 )}
-                {hasPermission(PERMISSIONS.COMPLIANCE_VIEW) && (
+                {hasPermission(PERMISSIONS.TIME_ENTRIES_VIEW) && (
                   <button
-                    onClick={() => router.push(`${base}/analises/conformidade-clt`)}
+                    onClick={() => router.push(`${base}/analises/registros`)}
                     className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                      isActive(`${base}/analises/conformidade-clt`) ? 'bg-muted/50 font-medium' : ''
+                      isActive(`${base}/analises/registros`) ? 'bg-muted/50 font-medium' : ''
                     }`}
                   >
-                    <Scale className="h-3 w-3 mr-2" />
-                    <span>Conformidade CLT</span>
+                    <List className="h-3 w-3 mr-2" />
+                    <span>Registros</span>
                   </button>
                 )}
               </div>
             )}
 
-          {/* Dropdown (sidebar colapsada) */}
+          {/* Dropdown (sidebar colapsada) - ordem alfabética */}
           {collapsed && dropdownOpen && activeDropdown === 'analises' && (
             <div 
               ref={dropdownRef}
@@ -194,18 +205,32 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">
                 Análises
               </div>
-              {hasPermission(PERMISSIONS.TIME_ENTRIES_VIEW) && (
+              {hasPermission(PERMISSIONS.COMPLIANCE_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/analises/registros`)
+                    router.push(`${base}/analises/conformidade-clt`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/analises/registros`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/analises/conformidade-clt`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <List className="h-4 w-4 mr-2" />
-                  <span>Registros</span>
+                  <Scale className="h-4 w-4 mr-2" />
+                  <span>Conformidade CLT</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.TIME_ENTRIES_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/espelho-ponto`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/espelho-ponto`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  <span>Espelho de Ponto</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.OVERTIME_VIEW) && (
@@ -229,18 +254,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                   </div>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.COMPLIANCE_VIEW) && (
+              {hasPermission(PERMISSIONS.TIME_ENTRIES_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/analises/conformidade-clt`)
+                    router.push(`${base}/analises/registros`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/analises/conformidade-clt`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/analises/registros`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Scale className="h-4 w-4 mr-2" />
-                  <span>Conformidade CLT</span>
+                  <List className="h-4 w-4 mr-2" />
+                  <span>Registros</span>
                 </button>
               )}
             </div>
@@ -279,18 +304,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
             )}
           </button>
           
-          {/* Submenu normal (sidebar aberta) */}
+          {/* Submenu normal (sidebar aberta) - ordem alfabética */}
           {isMenuExpanded('gestao') && !collapsed && (
             <div className="ml-6 border-l border-border space-y-1">
-              {hasPermission(PERMISSIONS.EMPLOYEES_VIEW) && (
+              {hasPermission(PERMISSIONS.PAYROLL_VIEW) && (
                 <button
-                  onClick={() => router.push(`${base}/funcionarios`)}
+                  onClick={() => router.push(`${base}/atestados`)}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/funcionarios`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/atestados`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Users className="h-3 w-3 mr-2" />
-                  <span>Funcionários</span>
+                  <Stethoscope className="h-3 w-3 mr-2" />
+                  <span>Atestados</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.POSITIONS_VIEW) && (
@@ -302,6 +327,17 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 >
                   <Briefcase className="h-3 w-3 mr-2" />
                   <span>Cargos</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.GEOFENCES_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/cercas-geograficas`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/cercas-geograficas`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <MapPin className="h-3 w-3 mr-2" />
+                  <span>Cercas Geográficas</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.DEPARTMENTS_VIEW) && (
@@ -317,6 +353,17 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               )}
               {hasPermission(PERMISSIONS.PAYROLL_VIEW) && (
                 <button
+                  onClick={() => router.push(`${base}/ferias`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/ferias`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Palmtree className="h-3 w-3 mr-2" />
+                  <span>Férias</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.PAYROLL_VIEW) && (
+                <button
                   onClick={() => router.push(`${base}/folha-pagamento`)}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
                     isActive(`${base}/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
@@ -326,15 +373,15 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                   <span>Folha de Pagamento</span>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.ADVANCES_VIEW) && (
+              {hasPermission(PERMISSIONS.EMPLOYEES_VIEW) && (
                 <button
-                  onClick={() => router.push(`${base}/vales`)}
+                  onClick={() => router.push(`${base}/funcionarios`)}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/vales`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/funcionarios`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Wallet className="h-3 w-3 mr-2" />
-                  <span>Vales</span>
+                  <Users className="h-3 w-3 mr-2" />
+                  <span>Funcionários</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.TERMINAL_VIEW) && (
@@ -348,21 +395,21 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                   <span>Terminal de Ponto</span>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.GEOFENCES_VIEW) && (
+              {hasPermission(PERMISSIONS.ADVANCES_VIEW) && (
                 <button
-                  onClick={() => router.push(`${base}/cercas-geograficas`)}
+                  onClick={() => router.push(`${base}/vales`)}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/cercas-geograficas`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/vales`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <MapPin className="h-3 w-3 mr-2" />
-                  <span>Cercas Geográficas</span>
+                  <Wallet className="h-3 w-3 mr-2" />
+                  <span>Vales</span>
                 </button>
               )}
             </div>
           )}
           
-          {/* Dropdown (sidebar colapsada) - por cima de tudo */}
+          {/* Dropdown (sidebar colapsada) - ordem alfabética */}
           {collapsed && dropdownOpen && activeDropdown === 'gestao' && (
             <div 
               ref={dropdownRef}
@@ -375,18 +422,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">
                 Gestão de Colaboradores
               </div>
-              {hasPermission(PERMISSIONS.EMPLOYEES_VIEW) && (
+              {hasPermission(PERMISSIONS.PAYROLL_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/funcionarios`)
+                    router.push(`${base}/atestados`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/funcionarios`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/atestados`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Users className="h-4 w-4 mr-2" />
-                  <span>Funcionários</span>
+                  <Stethoscope className="h-4 w-4 mr-2" />
+                  <span>Atestados</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.POSITIONS_VIEW) && (
@@ -401,6 +448,20 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 >
                   <Briefcase className="h-4 w-4 mr-2" />
                   <span>Cargos</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.GEOFENCES_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/cercas-geograficas`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/cercas-geograficas`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <MapPin className="h-4 w-4 mr-2" />
+                  <span>Cercas Geográficas</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.DEPARTMENTS_VIEW) && (
@@ -420,6 +481,20 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               {hasPermission(PERMISSIONS.PAYROLL_VIEW) && (
                 <button
                   onClick={() => {
+                    router.push(`${base}/ferias`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/ferias`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Palmtree className="h-4 w-4 mr-2" />
+                  <span>Férias</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.PAYROLL_VIEW) && (
+                <button
+                  onClick={() => {
                     router.push(`${base}/folha-pagamento`)
                     setDropdownOpen(false)
                   }}
@@ -431,18 +506,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                   <span>Folha de Pagamento</span>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.ADVANCES_VIEW) && (
+              {hasPermission(PERMISSIONS.EMPLOYEES_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/vales`)
+                    router.push(`${base}/funcionarios`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/vales`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/funcionarios`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Wallet className="h-4 w-4 mr-2" />
-                  <span>Vales</span>
+                  <Users className="h-4 w-4 mr-2" />
+                  <span>Funcionários</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.TERMINAL_VIEW) && (
@@ -459,18 +534,18 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                   <span>Terminal de Ponto</span>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.GEOFENCES_VIEW) && (
+              {hasPermission(PERMISSIONS.ADVANCES_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/cercas-geograficas`)
+                    router.push(`${base}/vales`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/cercas-geograficas`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/vales`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <MapPin className="h-4 w-4 mr-2" />
-                  <span>Cercas Geográficas</span>
+                  <Wallet className="h-4 w-4 mr-2" />
+                  <span>Vales</span>
                 </button>
               )}
             </div>
@@ -504,29 +579,29 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
             )}
           </button>
 
-          {/* Submenu normal (sidebar aberta) */}
+          {/* Submenu normal (sidebar aberta) - ordem alfabética */}
           {isMenuExpanded('configuracoes') && !collapsed && (
             <div className="ml-6 border-l border-border space-y-1">
               {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
                 <button
-                  onClick={() => router.push(`${base}/configuracoes/dashboard`)}
+                  onClick={() => router.push(`${base}/configuracoes/aplicativo`)}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Monitor className="h-3 w-3 mr-2" />
-                  <span>Dashboard</span>
+                  <Settings className="h-3 w-3 mr-2" />
+                  <span>Aplicativo</span>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+              {hasPermission(PERMISSIONS.AUDIT_VIEW) && (
                 <button
-                  onClick={() => router.push(`${base}/configuracoes/folha-pagamento`)}
+                  onClick={() => router.push(`${base}/auditoria`)}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/auditoria`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <FileText className="h-3 w-3 mr-2" />
-                  <span>Folha de Pagamento</span>
+                  <FileSearch className="h-3 w-3 mr-2" />
+                  <span>Auditoria</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
@@ -542,13 +617,46 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               )}
               {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
                 <button
-                  onClick={() => router.push(`${base}/configuracoes/aplicativo`)}
+                  onClick={() => router.push(`${base}/configuracoes/empresa`)}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/configuracoes/empresa`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Settings className="h-3 w-3 mr-2" />
-                  <span>Aplicativo</span>
+                  <Building2 className="h-3 w-3 mr-2" />
+                  <span>Dados da Empresa</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/configuracoes/dashboard`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Monitor className="h-3 w-3 mr-2" />
+                  <span>Dashboard</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/feriados`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/feriados`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Calendar className="h-3 w-3 mr-2" />
+                  <span>Feriados</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => router.push(`${base}/configuracoes/folha-pagamento`)}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <FileText className="h-3 w-3 mr-2" />
+                  <span>Folha de Pagamento</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.PERMISSIONS_VIEW) && (
@@ -562,21 +670,10 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                   <span>Permissões</span>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.AUDIT_VIEW) && (
-                <button
-                  onClick={() => router.push(`${base}/auditoria`)}
-                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/auditoria`) ? 'bg-muted/50 font-medium' : ''
-                  }`}
-                >
-                  <FileSearch className="h-3 w-3 mr-2" />
-                  <span>Auditoria</span>
-                </button>
-              )}
             </div>
           )}
 
-          {/* Dropdown (sidebar colapsada) - por cima de tudo */}
+          {/* Dropdown (sidebar colapsada) - ordem alfabética */}
           {collapsed && dropdownOpen && activeDropdown === 'config' && (
             <div 
               ref={dropdownRef}
@@ -592,29 +689,29 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/configuracoes/dashboard`)
+                    router.push(`${base}/configuracoes/aplicativo`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Monitor className="h-4 w-4 mr-2" />
-                  <span>Dashboard</span>
+                  <Settings className="h-4 w-4 mr-2" />
+                  <span>Aplicativo</span>
                 </button>
               )}
-              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+              {hasPermission(PERMISSIONS.AUDIT_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/configuracoes/folha-pagamento`)
+                    router.push(`${base}/auditoria`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/auditoria`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <FileText className="h-4 w-4 mr-2" />
-                  <span>Folha de Pagamento</span>
+                  <FileSearch className="h-4 w-4 mr-2" />
+                  <span>Auditoria</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
@@ -634,15 +731,57 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
               {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
                 <button
                   onClick={() => {
-                    router.push(`${base}/configuracoes/aplicativo`)
+                    router.push(`${base}/configuracoes/empresa`)
                     setDropdownOpen(false)
                   }}
                   className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/configuracoes/aplicativo`) ? 'bg-muted/50 font-medium' : ''
+                    isActive(`${base}/configuracoes/empresa`) ? 'bg-muted/50 font-medium' : ''
                   }`}
                 >
-                  <Settings className="h-4 w-4 mr-2" />
-                  <span>Aplicativo</span>
+                  <Building2 className="h-4 w-4 mr-2" />
+                  <span>Dados da Empresa</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/configuracoes/dashboard`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/dashboard`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Monitor className="h-4 w-4 mr-2" />
+                  <span>Dashboard</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/feriados`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/feriados`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <span>Feriados</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.SETTINGS_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/configuracoes/folha-pagamento`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/configuracoes/folha-pagamento`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  <span>Folha de Pagamento</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.PERMISSIONS_VIEW) && (
@@ -657,20 +796,6 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 >
                   <Shield className="h-4 w-4 mr-2" />
                   <span>Permissões</span>
-                </button>
-              )}
-              {hasPermission(PERMISSIONS.AUDIT_VIEW) && (
-                <button
-                  onClick={() => {
-                    router.push(`${base}/auditoria`)
-                    setDropdownOpen(false)
-                  }}
-                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
-                    isActive(`${base}/auditoria`) ? 'bg-muted/50 font-medium' : ''
-                  }`}
-                >
-                  <FileSearch className="h-4 w-4 mr-2" />
-                  <span>Auditoria</span>
                 </button>
               )}
             </div>

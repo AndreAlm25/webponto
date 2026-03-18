@@ -17,7 +17,10 @@ import { seedPayrollConfig } from './02-payroll-config.seed'
 import { seedTimeEntries } from './03-time-entries.seed'
 import { seedPayroll } from './04-payroll.seed'
 import { seedAdvances } from './05-advances.seed'
+import { seedMedicalCertificates } from './06-medical-certificates.seed'
+import { seedVacations } from './07-vacations.seed'
 import { seedPermissionsWithClient } from '../seed-permissions'
+import { generateCalculosDoc } from './99-generate-doc.seed'
 
 const prisma = new PrismaClient()
 
@@ -52,10 +55,13 @@ function printMenu() {
   log('  [0] 🗑️  Limpar banco (reset)', 'red')
   log('  [1] 🏢 Base (empresas + funcionários)', 'green')
   log('  [2] ⚙️  Configurações de folha de pagamento', 'yellow')
-  log('  [3] ⏰ Batidas de ponto (mês atual + anterior)', 'blue')
+  log('  [3] ⏰ Batidas de ponto (4 meses)', 'blue')
   log('  [4] 💰 Folha de pagamento + Holerites', 'magenta')
   log('  [5] 💵 Vales/Adiantamentos', 'cyan')
-  log('  [6] 🔐 Permissões (RBAC)', 'green')
+  log('  [6] 🏥 Atestados Médicos', 'yellow')
+  log('  [7] 🏖️  Férias', 'blue')
+  log('  [8] 🔐 Permissões (RBAC)', 'green')
+  log('  [9] 📄 Gerar documento de cálculos', 'cyan')
   console.log()
   log('  [A] 🚀 RODAR TODOS (reset + todos os seeds)', 'bright')
   log('  [Q] ❌ Sair', 'reset')
@@ -102,34 +108,61 @@ async function runSeed(option: string): Promise<boolean> {
         break
 
       case '6':
+        log('\n🏥 Gerando atestados médicos...', 'yellow')
+        await seedMedicalCertificates(prisma)
+        log('✅ Atestados gerados!', 'green')
+        break
+
+      case '7':
+        log('\n🏖️  Gerando férias...', 'blue')
+        await seedVacations(prisma)
+        log('✅ Férias geradas!', 'green')
+        break
+
+      case '8':
         log('\n🔐 Criando permissões...', 'green')
         await seedPermissionsWithClient(prisma)
         log('✅ Permissões criadas!', 'green')
         break
 
+      case '9':
+        log('\n📄 Gerando documento de cálculos...', 'cyan')
+        await generateCalculosDoc(prisma)
+        log('✅ Documento gerado!', 'green')
+        break
+
       case 'A':
         log('\n🚀 Executando TODOS os seeds...', 'bright')
         
-        log('\n[1/7] 🗑️  Limpando banco...', 'red')
+        log('\n[1/10] 🗑️  Limpando banco...', 'red')
         await resetDatabase(prisma)
         
-        log('[2/7] 🏢 Criando dados base...', 'green')
+        log('[2/10] 🏢 Criando dados base...', 'green')
         await seedBase(prisma)
         
-        log('[3/7] 🔐 Criando permissões...', 'green')
+        log('[3/10] 🔐 Criando permissões...', 'green')
         await seedPermissionsWithClient(prisma)
         
-        log('[4/7] ⚙️  Configurando folha...', 'yellow')
+        log('[4/10] ⚙️  Configurando folha...', 'yellow')
         await seedPayrollConfig(prisma)
         
-        log('[5/7] ⏰ Gerando batidas...', 'blue')
+        log('[5/10] ⏰ Gerando batidas (4 meses)...', 'blue')
         await seedTimeEntries(prisma)
         
-        log('[6/7] 💰 Gerando folha...', 'magenta')
+        log('[6/10] 💵 Gerando vales...', 'cyan')
+        await seedAdvances(prisma)
+        
+        log('[7/10] 🏥 Gerando atestados...', 'yellow')
+        await seedMedicalCertificates(prisma)
+        
+        log('[8/10] 🏖️  Gerando férias...', 'blue')
+        await seedVacations(prisma)
+        
+        log('[9/10] 💰 Gerando folha...', 'magenta')
         await seedPayroll(prisma)
         
-        log('[7/7] 💵 Gerando vales...', 'cyan')
-        await seedAdvances(prisma)
+        log('[10/10] 📄 Gerando documento de cálculos...', 'cyan')
+        await generateCalculosDoc(prisma)
         
         log('\n✅ TODOS os seeds executados com sucesso!', 'green')
         break

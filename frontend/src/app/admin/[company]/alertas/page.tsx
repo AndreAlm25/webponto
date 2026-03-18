@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { PERMISSIONS } from '@/hooks/usePermissions'
 import { Bell, AlertTriangle, Clock, BedDouble, ClockAlert, Filter } from 'lucide-react'
@@ -139,19 +140,20 @@ export default function AlertsPage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.ALERTS_VIEW}>
-    <div className="p-6">
+    <PageContainer>
       <PageHeader
         title="Alertas"
         description="Monitore violações e pendências"
         icon={<Bell className="h-6 w-6" />}
         breadcrumbs={[
           { label: 'Admin', href: `/admin/${company}` },
+          { label: 'Comunicação' },
           { label: 'Alertas' },
         ]}
       />
 
       {/* Cards de resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="p-4 bg-background border border-border rounded-lg">
           <p className="text-sm text-muted-foreground">Total</p>
           <p className="text-2xl font-bold">{stats.total}</p>
@@ -253,7 +255,7 @@ export default function AlertsPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
     </ProtectedPage>
   )
 }

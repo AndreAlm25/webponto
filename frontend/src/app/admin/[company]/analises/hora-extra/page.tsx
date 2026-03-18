@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { useCompanySlug } from '@/hooks/useCompanySlug'
 import { SlugMismatchError } from '@/components/admin/SlugMismatchError'
 import PageHeader from '@/components/admin/PageHeader'
+import PageContainer from '@/components/admin/PageContainer'
 import { useParams } from 'next/navigation'
 import { ProtectedPage } from '@/components/auth/ProtectedPage'
 import { PERMISSIONS, Can } from '@/hooks/usePermissions'
@@ -213,19 +214,20 @@ export default function OvertimePage() {
 
   return (
     <ProtectedPage permission={PERMISSIONS.OVERTIME_VIEW}>
-      <PageHeader
-        title="Hora Extra"
-        description="Gerencie as horas extras dos funcionários"
-        icon={<ClockAlert className="h-6 w-6" />}
-        breadcrumbs={[
-          { label: 'Admin', href: base },
-          { label: 'Análises' },
-          { label: 'Hora Extra' }
-        ]}
-      />
+      <PageContainer>
+        <PageHeader
+          title="Hora Extra"
+          description="Gerencie as horas extras dos funcionários"
+          icon={<ClockAlert className="h-6 w-6" />}
+          breadcrumbs={[
+            { label: 'Admin', href: base },
+            { label: 'Análises' },
+            { label: 'Hora Extra' }
+          ]}
+        />
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {/* Cards de Resumo */}
+        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -401,6 +403,7 @@ export default function OvertimePage() {
           )}
         </div>
       </Card>
+      </PageContainer>
     </ProtectedPage>
   )
 }

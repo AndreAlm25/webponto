@@ -12,4 +12,28 @@ export class UpdateDashboardConfigDto {
   @IsInt()
   @Min(1)
   dashboardRecentEntriesLimit?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  dashboardShowTotalEmployees?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  dashboardShowTodayEntries?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  dashboardShowFacialRecognition?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  dashboardShowRemoteClock?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  dashboardShowOvertime?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  dashboardShowAlerts?: boolean;
 }

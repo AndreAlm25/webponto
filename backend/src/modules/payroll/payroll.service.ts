@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import { Decimal } from '@prisma/client/runtime/library'
+import { PayrollStatus } from '@prisma/client'
+import { EventsGateway } from '../../events/events.gateway'
 
 // Tabela INSS 2025 (atualizada)
 const INSS_TABLE = [
@@ -23,11 +25,6 @@ const IR_DEPENDENT_DEDUCTION = 189.59
 
 // Interface para configurações de folha
 interface PayrollConfigData {
-  // Frequência e dias de pagamento
-  paymentFrequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
-  paymentDay1: number
-  paymentDay2?: number | null
-  paymentDayOfWeek?: number | null
   // Encargos
   enableInss: boolean
   enableIrrf: boolean
@@ -37,14 +34,10 @@ interface PayrollConfigData {
   nightShiftStart: string
   nightShiftEnd: string
   nightShiftPercentage: number
-  // Adiantamento salarial
-  enableSalaryAdvance: boolean
-  salaryAdvanceDay?: number | null
-  salaryAdvancePercentage?: number | null
   // Vale avulso
   enableExtraAdvance: boolean
   maxExtraAdvancePercentage?: number | null
-  // Benefícios
+  // Benefícios padrão da empresa
   enableTransportVoucher: boolean
   transportVoucherRate: number
   enableMealVoucher: boolean
@@ -54,15 +47,83 @@ interface PayrollConfigData {
   healthInsuranceValue: number
   enableDentalInsurance: boolean
   dentalInsuranceValue: number
-  // Cálculo
-  workDaysPerMonth: number
-  workHoursPerDay: number
+  // 13º e Férias
+  enable13thSalary: boolean
+  enableVacationBonus: boolean
+  // Modo de pagamento flexível
+  paymentMode: 'FULL' | 'ADVANCE' | 'INSTALLMENTS'
+  fullPaymentDay: number
+  advancePercent: number
+  advancePaymentDay: number
+  balancePaymentDay: number
+  installmentCount: number
+  installment1Percent: number
+  installment1Day: number
+  installment2Percent: number
+  installment2Day: number
+  installment3Percent: number
+  installment3Day?: number | null
+  installment4Percent: number
+  installment4Day?: number | null
+}
+
+// Mapeamento de escala para dias por mês
+const WORK_SCHEDULE_DAYS: Record<string, number> = {
+  FIVE_TWO: 22,          // 5x2 - Segunda a Sexta
+  SIX_ONE: 26,           // 6x1 - Segunda a Sábado
+  TWELVE_THIRTYSIX: 15,  // 12x36 - ~15 dias/mês
+  FOUR_TWO: 20,          // 4x2 - ~20 dias/mês
+  CUSTOM: 22,            // Personalizado (usa customWorkDaysPerMonth)
+}
+
+// Calcular horas por dia baseado no horário do funcionário
+function calculateHoursPerDay(
+  workStartTime: string,
+  workEndTime: string,
+  breakStartTime?: string | null,
+  breakEndTime?: string | null
+): number {
+  const [startH, startM] = workStartTime.split(':').map(Number)
+  const [endH, endM] = workEndTime.split(':').map(Number)
+  
+  let totalMinutes = (endH * 60 + endM) - (startH * 60 + startM)
+  
+  // Se horário de saída é menor que entrada, passou da meia-noite
+  if (totalMinutes < 0) {
+    totalMinutes += 24 * 60
+  }
+  
+  // Descontar intervalo se existir
+  if (breakStartTime && breakEndTime) {
+    const [breakStartH, breakStartM] = breakStartTime.split(':').map(Number)
+    const [breakEndH, breakEndM] = breakEndTime.split(':').map(Number)
+    const breakMinutes = (breakEndH * 60 + breakEndM) - (breakStartH * 60 + breakStartM)
+    if (breakMinutes > 0) {
+      totalMinutes -= breakMinutes
+    }
+  }
+  
+  return totalMinutes / 60
+}
+
+// Calcular dias por mês baseado na escala do funcionário
+function calculateDaysPerMonth(
+  workSchedule: string,
+  customWorkDaysPerMonth?: number | null
+): number {
+  if (workSchedule === 'CUSTOM' && customWorkDaysPerMonth) {
+    return customWorkDaysPerMonth
+  }
+  return WORK_SCHEDULE_DAYS[workSchedule] || 22
 }
 
 // Serviço de Folha de Pagamento
 @Injectable()
 export class PayrollService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   // ==========================================
   // CONFIGURAÇÕES DE FOLHA
@@ -79,26 +140,19 @@ export class PayrollService {
       config = await this.prisma.payrollConfig.create({
         data: {
           companyId,
-          paymentFrequency: 'MONTHLY',
-          paymentDay1: 5,
-          paymentDay2: null,
-          paymentDayOfWeek: null,
+          // Encargos
           enableInss: true,
           enableIrrf: true,
           enableFgts: true,
-          // Adicional noturno
-          enableNightShift: true,
+          // Adicional noturno - DESABILITADO por padrão
+          enableNightShift: false,
           nightShiftStart: '22:00',
           nightShiftEnd: '05:00',
           nightShiftPercentage: 20,
-          // Adiantamento salarial
-          enableSalaryAdvance: false,
-          salaryAdvanceDay: null,
-          salaryAdvancePercentage: null,
           // Vale avulso
           enableExtraAdvance: false,
           maxExtraAdvancePercentage: null,
-          // Benefícios
+          // Benefícios padrão
           enableTransportVoucher: true,
           transportVoucherRate: 6,
           enableMealVoucher: false,
@@ -108,10 +162,24 @@ export class PayrollService {
           healthInsuranceValue: 0,
           enableDentalInsurance: false,
           dentalInsuranceValue: 0,
+          // 13º e Férias
           enable13thSalary: true,
           enableVacationBonus: true,
-          workDaysPerMonth: 22,
-          workHoursPerDay: 8,
+          // Modo de pagamento - PADRÃO: Mensal, dia 5
+          paymentMode: 'FULL',
+          fullPaymentDay: 5,
+          advancePercent: 40,
+          advancePaymentDay: 15,
+          balancePaymentDay: 5,
+          installmentCount: 2,
+          installment1Percent: 50,
+          installment1Day: 15,
+          installment2Percent: 50,
+          installment2Day: 30,
+          installment3Percent: 0,
+          installment3Day: null,
+          installment4Percent: 0,
+          installment4Day: null,
         },
       })
     }
@@ -126,6 +194,21 @@ export class PayrollService {
   async updateConfig(companyId: string, data: Partial<PayrollConfigData>) {
     // Garantir que existe configuração
     await this.getOrCreateConfig(companyId)
+
+    // Verificar nível de conformidade da empresa
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { complianceLevel: true },
+    })
+
+    // Se complianceLevel=FULL, forçar encargos obrigatórios como true
+    if (company?.complianceLevel === 'FULL') {
+      data.enableInss = true
+      data.enableIrrf = true
+      data.enableFgts = true
+      data.enable13thSalary = true
+      data.enableVacationBonus = true
+    }
 
     const config = await this.prisma.payrollConfig.update({
       where: { companyId },
@@ -409,6 +492,9 @@ export class PayrollService {
                 department: { select: { name: true } },
               },
             },
+            installments: {
+              orderBy: { installmentNumber: 'asc' },
+            },
           },
           orderBy: { employeeName: 'asc' },
         },
@@ -433,6 +519,9 @@ export class PayrollService {
                   position: { select: { name: true } },
                   department: { select: { name: true } },
                 },
+              },
+              installments: {
+                orderBy: { installmentNumber: 'asc' },
               },
             },
           },
@@ -522,10 +611,88 @@ export class PayrollService {
     let totalDeductions = 0
     let totalNet = 0
 
+    // Buscar todos os vales (Advance) aprovados ou pagos do mês de referência
+    const advances = await this.prisma.advance.findMany({
+      where: {
+        companyId: payroll.companyId,
+        referenceMonth: payroll.referenceMonth,
+        referenceYear: payroll.referenceYear,
+        status: { in: ['APPROVED', 'PAID'] },
+      },
+    })
+
+    // Agrupar vales por funcionário
+    const advancesByEmployee = new Map<string, any[]>()
+    for (const advance of advances) {
+      const list = advancesByEmployee.get(advance.employeeId) || []
+      list.push(advance)
+      advancesByEmployee.set(advance.employeeId, list)
+    }
+
+    // Buscar atestados médicos aprovados do mês de referência
+    const startOfMonth = new Date(payroll.referenceYear, payroll.referenceMonth - 1, 1)
+    const endOfMonth = new Date(payroll.referenceYear, payroll.referenceMonth, 0)
+    
+    const medicalCertificates = await this.prisma.medicalCertificate.findMany({
+      where: {
+        companyId: payroll.companyId,
+        status: 'APPROVED',
+        OR: [
+          { startDate: { gte: startOfMonth, lte: endOfMonth } },
+          { endDate: { gte: startOfMonth, lte: endOfMonth } },
+          { AND: [{ startDate: { lte: startOfMonth } }, { endDate: { gte: endOfMonth } }] },
+        ],
+      },
+    })
+
+    // Agrupar atestados por funcionário e calcular dias justificados
+    const justifiedDaysByEmployee = new Map<string, number>()
+    for (const cert of medicalCertificates) {
+      const certStart = cert.startDate > startOfMonth ? cert.startDate : startOfMonth
+      const certEnd = cert.endDate < endOfMonth ? cert.endDate : endOfMonth
+      const diffTime = Math.abs(certEnd.getTime() - certStart.getTime())
+      const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+      
+      const current = justifiedDaysByEmployee.get(cert.employeeId) || 0
+      justifiedDaysByEmployee.set(cert.employeeId, current + days)
+    }
+
+    // Buscar períodos de férias do mês
+    const vacationPeriods = await this.prisma.vacationPeriod.findMany({
+      where: {
+        vacation: {
+          companyId: payroll.companyId,
+          status: { in: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] },
+        },
+        OR: [
+          { startDate: { gte: startOfMonth, lte: endOfMonth } },
+          { endDate: { gte: startOfMonth, lte: endOfMonth } },
+          { AND: [{ startDate: { lte: startOfMonth } }, { endDate: { gte: endOfMonth } }] },
+        ],
+        status: { in: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] },
+      },
+      include: { vacation: true },
+    })
+
+    // Agrupar dias de férias por funcionário
+    const vacationDaysByEmployee = new Map<string, number>()
+    for (const period of vacationPeriods) {
+      const periodStart = period.startDate > startOfMonth ? period.startDate : startOfMonth
+      const periodEnd = period.endDate < endOfMonth ? period.endDate : endOfMonth
+      const diffTime = Math.abs(periodEnd.getTime() - periodStart.getTime())
+      const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+      
+      const current = vacationDaysByEmployee.get(period.vacation.employeeId) || 0
+      vacationDaysByEmployee.set(period.vacation.employeeId, current + days)
+    }
+
     // Gerar/atualizar holerite de cada funcionário
     for (const employee of employees) {
       const entries = entriesByEmployee.get(employee.id) || []
-      const payslipData = this.calculatePayslip(employee, entries, payroll.referenceMonth, payroll.referenceYear, config)
+      const employeeAdvances = advancesByEmployee.get(employee.id) || []
+      const justifiedAbsenceDays = justifiedDaysByEmployee.get(employee.id) || 0
+      const vacationDaysInMonth = vacationDaysByEmployee.get(employee.id) || 0
+      const payslipData = this.calculatePayslip(employee, entries, payroll.referenceMonth, payroll.referenceYear, config, employeeAdvances, justifiedAbsenceDays, vacationDaysInMonth)
 
       // Verificar se já existe holerite
       const existingPayslip = payroll.payslips.find((p) => p.employeeId === employee.id)
@@ -577,6 +744,16 @@ export class PayrollService {
         })
       }
 
+      // Gerar parcelas de pagamento baseado na configuração
+      await this.generateInstallments(
+        payslipId,
+        Number(payslipData.netSalary),
+        payroll.referenceMonth,
+        payroll.referenceYear,
+        config,
+        employee
+      )
+
       totalGross += Number(payslipData.grossSalary)
       totalDeductions += Number(payslipData.totalDeductions)
       totalNet += Number(payslipData.netSalary)
@@ -617,11 +794,24 @@ export class PayrollService {
   }
 
   // Calcular dados do holerite de um funcionário
-  private calculatePayslip(employee: any, entries: any[], month: number, year: number, config: any) {
+  private calculatePayslip(employee: any, entries: any[], month: number, year: number, config: any, advances: any[] = [], justifiedAbsenceDays: number = 0, vacationDaysInMonth: number = 0) {
     const baseSalary = Number(employee.baseSalary)
-    const workHoursPerDay = Number(config.workHoursPerDay) || 8
-    const workDaysPerMonth = config.workDaysPerMonth || 22
-    const monthlyHours = workDaysPerMonth * workHoursPerDay // Horas mensais baseado na config
+    
+    // NOVO: Calcular horas/dia baseado no horário do funcionário
+    const workHoursPerDay = calculateHoursPerDay(
+      employee.workStartTime || '08:00',
+      employee.workEndTime || '18:00',
+      employee.breakStartTime,
+      employee.breakEndTime
+    )
+    
+    // NOVO: Calcular dias/mês baseado na escala do funcionário
+    const workDaysPerMonth = calculateDaysPerMonth(
+      employee.workSchedule || 'FIVE_TWO',
+      employee.customWorkDaysPerMonth
+    )
+    
+    const monthlyHours = workDaysPerMonth * workHoursPerDay
     const hourlyRate = baseSalary / monthlyHours
 
     // Calcular dias trabalhados e horas
@@ -648,10 +838,13 @@ export class PayrollService {
     const overtimeValue50 = overtimeHours50 * hourlyRate * 1.5
     const overtimeValue100 = overtimeHours100 * hourlyRate * 2
 
-    // Calcular faltas e atrasos
-    const totalWorkDaysInMonth = this.getWorkDaysInMonth(month, year)
-    const absenceDays = Math.max(0, totalWorkDaysInMonth - workDays)
+    // Calcular faltas e atrasos (usa dias da escala do funcionário)
+    // Descontar dias justificados por atestado médico E dias de férias
+    const expectedWorkDays = Math.max(0, workDaysPerMonth - vacationDaysInMonth) // Dias que deveria trabalhar (excluindo férias)
+    const rawAbsenceDays = Math.max(0, expectedWorkDays - workDays)
+    const absenceDays = Math.max(0, rawAbsenceDays - justifiedAbsenceDays)
     const absenceValue = absenceDays * (baseSalary / 30)
+    const justifiedDays = Math.min(justifiedAbsenceDays, rawAbsenceDays) // Dias efetivamente justificados
 
     const lateMinutes = entries.filter((e) => e.isLate).reduce((sum, e) => sum + (e.lateMinutes || 0), 0)
     const lateValue = (lateMinutes / 60) * hourlyRate
@@ -698,35 +891,81 @@ export class PayrollService {
       irRate = irCalc.rate
     }
 
-    // Vale-transporte (se habilitado)
+    // NOVO: Benefícios - usa config individual do funcionário se existir, senão usa config da empresa
+    const useCustomBenefits = employee.useCustomBenefits || false
+    
+    // Vale-transporte
     let transportVoucher = 0
-    if (config.enableTransportVoucher) {
-      const vtRate = Number(config.transportVoucherRate) || 6
+    const vtEnabled = useCustomBenefits && employee.transportVoucherEnabled !== null 
+      ? employee.transportVoucherEnabled 
+      : config.enableTransportVoucher
+    if (vtEnabled) {
+      const vtRate = useCustomBenefits && employee.transportVoucherRate !== null
+        ? Number(employee.transportVoucherRate)
+        : Number(config.transportVoucherRate) || 6
       transportVoucher = baseSalary * (vtRate / 100)
     }
 
-    // Vale-refeição (se habilitado)
+    // Vale-refeição
     let mealVoucher = 0
-    if (config.enableMealVoucher && config.mealVoucherDiscount > 0) {
-      mealVoucher = Number(config.mealVoucherValue) * (Number(config.mealVoucherDiscount) / 100)
+    const vrEnabled = useCustomBenefits && employee.mealVoucherEnabled !== null
+      ? employee.mealVoucherEnabled
+      : config.enableMealVoucher
+    if (vrEnabled) {
+      const vrValue = useCustomBenefits && employee.mealVoucherValue !== null
+        ? Number(employee.mealVoucherValue)
+        : Number(config.mealVoucherValue)
+      const vrDiscount = useCustomBenefits && employee.mealVoucherDiscount !== null
+        ? Number(employee.mealVoucherDiscount)
+        : Number(config.mealVoucherDiscount)
+      if (vrDiscount > 0) {
+        mealVoucher = vrValue * (vrDiscount / 100)
+      }
     }
 
-    // Plano de saúde (se habilitado)
+    // Plano de saúde
     let healthInsurance = 0
-    if (config.enableHealthInsurance) {
-      healthInsurance = Number(config.healthInsuranceValue) || 0
+    const healthEnabled = useCustomBenefits && employee.healthInsuranceEnabled !== null
+      ? employee.healthInsuranceEnabled
+      : config.enableHealthInsurance
+    if (healthEnabled) {
+      healthInsurance = useCustomBenefits && employee.healthInsuranceValue !== null
+        ? Number(employee.healthInsuranceValue)
+        : Number(config.healthInsuranceValue) || 0
     }
 
-    // Plano odontológico (se habilitado)
+    // Plano odontológico
     let dentalInsurance = 0
-    if (config.enableDentalInsurance) {
-      dentalInsurance = Number(config.dentalInsuranceValue) || 0
+    const dentalEnabled = useCustomBenefits && employee.dentalInsuranceEnabled !== null
+      ? employee.dentalInsuranceEnabled
+      : config.enableDentalInsurance
+    if (dentalEnabled) {
+      dentalInsurance = useCustomBenefits && employee.dentalInsuranceValue !== null
+        ? Number(employee.dentalInsuranceValue)
+        : Number(config.dentalInsuranceValue) || 0
     }
 
-    // Total de descontos
-    const totalDeductions = absenceValue + lateValue + inssValue + irValue + 
+    // Calcular vales (Advance) - separar por tipo
+    let salaryAdvanceValue = 0  // Adiantamento salarial
+    let extraAdvanceValue = 0   // Vale avulso
+    for (const advance of advances) {
+      const amount = Number(advance.amount || 0)
+      if (advance.type === 'SALARY') {
+        salaryAdvanceValue += amount
+      } else {
+        extraAdvanceValue += amount
+      }
+    }
+    const advancePayment = salaryAdvanceValue + extraAdvanceValue
+
+    // Valor do atraso para desconto (só desconta se enableLateDiscount = true)
+    // lateValue é sempre calculado para análise, mas lateDiscount é o que entra no desconto
+    const lateDiscount = config.enableLateDiscount !== false ? lateValue : 0
+
+    // Total de descontos (incluindo vales)
+    const totalDeductions = absenceValue + lateDiscount + inssValue + irValue + 
                            transportVoucher + mealVoucher + healthInsurance + 
-                           dentalInsurance + customDeductions
+                           dentalInsurance + customDeductions + advancePayment
 
     // FGTS (se habilitado - obrigação da empresa, não desconta do funcionário)
     let fgtsBase = 0
@@ -762,8 +1001,10 @@ export class PayrollService {
       totalEarnings,
       absenceDays,
       absenceValue,
+      justifiedAbsenceDays: justifiedDays,
       lateMinutes,
       lateValue,
+      lateDiscounted: config.enableLateDiscount !== false,
       inssBase,
       inssValue,
       inssRate,
@@ -776,7 +1017,9 @@ export class PayrollService {
       dentalInsurance,
       unionContribution: 0,
       loanDeduction: 0,
-      advancePayment: 0,
+      advancePayment,
+      salaryAdvanceValue,
+      extraAdvanceValue,
       otherDeductions: customDeductions,
       totalDeductions,
       fgtsBase,
@@ -854,6 +1097,8 @@ export class PayrollService {
 
   // Aprovar folha de pagamento
   async approvePayroll(payrollId: string, userId: string) {
+    console.log('[approvePayroll] payrollId:', payrollId)
+    
     const payroll = await this.prisma.payroll.findUnique({
       where: { id: payrollId },
     })
@@ -862,8 +1107,11 @@ export class PayrollService {
       throw new NotFoundException('Folha de pagamento não encontrada')
     }
 
+    console.log('[approvePayroll] payroll status:', payroll.status)
+
+    // Permitir aprovar folhas em REVIEW (após gerar holerites)
     if (payroll.status !== 'REVIEW') {
-      throw new BadRequestException('Folha de pagamento precisa estar em revisão para ser aprovada')
+      throw new BadRequestException(`Folha de pagamento precisa estar em revisão para ser aprovada. Status atual: ${payroll.status}`)
     }
 
     // Aprovar todos os holerites
@@ -872,7 +1120,8 @@ export class PayrollService {
       data: {
         status: 'APPROVED',
         approvedAt: new Date(),
-        approvedBy: userId,
+        // approvedBy só aceita UUID válido, não string 'system'
+        ...(userId && userId !== 'system' ? { approvedBy: userId } : {}),
       },
     })
 
@@ -881,7 +1130,8 @@ export class PayrollService {
       data: {
         status: 'APPROVED',
         closedAt: new Date(),
-        closedBy: userId,
+        // closedBy só aceita UUID válido, não string 'system'
+        ...(userId && userId !== 'system' ? { closedBy: userId } : {}),
       },
       include: {
         payslips: {
@@ -1061,6 +1311,224 @@ export class PayrollService {
     }
   }
 
+  // ==========================================
+  // APROVAÇÃO E PAGAMENTO INDIVIDUAL
+  // ==========================================
+
+  // Aprovar holerite individual
+  async approvePayslip(payslipId: string, userId: string) {
+    const payslip = await this.prisma.payslip.findUnique({
+      where: { id: payslipId },
+      include: { payroll: true },
+    })
+
+    if (!payslip) {
+      throw new NotFoundException('Holerite não encontrado')
+    }
+
+    if (payslip.status !== 'CALCULATED') {
+      throw new BadRequestException('Holerite precisa estar calculado para ser aprovado')
+    }
+
+    const updated = await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        // approvedBy só aceita UUID válido, não string 'system'
+        ...(userId && userId !== 'system' ? { approvedBy: userId } : {}),
+      },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true, avatarUrl: true } },
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    // Verificar se todos os holerites da folha foram aprovados
+    await this.updatePayrollStatusIfNeeded(payslip.payrollId)
+
+    return {
+      success: true,
+      message: 'Holerite aprovado com sucesso',
+      payslip: this.formatPayslip(updated),
+    }
+  }
+
+  // Aprovar múltiplos holerites
+  async approveMultiplePayslips(payslipIds: string[], userId: string) {
+    console.log('[approveMultiplePayslips] payslipIds:', payslipIds)
+    console.log('[approveMultiplePayslips] userId:', userId)
+    
+    if (!payslipIds || payslipIds.length === 0) {
+      throw new BadRequestException('Nenhum holerite selecionado')
+    }
+    
+    const payslips = await this.prisma.payslip.findMany({
+      where: { id: { in: payslipIds } },
+    })
+    
+    console.log('[approveMultiplePayslips] found payslips:', payslips.length)
+    console.log('[approveMultiplePayslips] payslips status:', payslips.map(p => ({ id: p.id, status: p.status })))
+
+    if (payslips.length === 0) {
+      throw new BadRequestException('Nenhum holerite encontrado com os IDs fornecidos')
+    }
+
+    const notCalculated = payslips.filter(p => p.status !== 'CALCULATED')
+    if (notCalculated.length > 0) {
+      console.log('[approveMultiplePayslips] notCalculated:', notCalculated.map(p => ({ id: p.id, status: p.status })))
+      throw new BadRequestException(`${notCalculated.length} holerite(s) não estão calculados. Status atual: ${notCalculated.map(p => p.status).join(', ')}`)
+    }
+
+    await this.prisma.payslip.updateMany({
+      where: { id: { in: payslipIds } },
+      data: {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        // approvedBy só aceita UUID válido, não string 'system'
+        ...(userId && userId !== 'system' ? { approvedBy: userId } : {}),
+      },
+    })
+
+    // Atualizar status das folhas afetadas
+    const payrollIds = [...new Set(payslips.map(p => p.payrollId))]
+    for (const payrollId of payrollIds) {
+      await this.updatePayrollStatusIfNeeded(payrollId)
+    }
+
+    return {
+      success: true,
+      message: `${payslipIds.length} holerite(s) aprovado(s) com sucesso`,
+      approvedCount: payslipIds.length,
+    }
+  }
+
+  // Pagar holerite individual
+  async payPayslip(payslipId: string, userId: string) {
+    const payslip = await this.prisma.payslip.findUnique({
+      where: { id: payslipId },
+      include: { payroll: true },
+    })
+
+    if (!payslip) {
+      throw new NotFoundException('Holerite não encontrado')
+    }
+
+    // Só pode pagar holerite que foi aceito pelo funcionário
+    if (payslip.status !== 'ACCEPTED') {
+      throw new BadRequestException('Holerite precisa ser aceito pelo funcionário antes de ser pago')
+    }
+
+    const updated = await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: {
+        status: 'PAID',
+        paidAt: new Date(),
+      },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true, avatarUrl: true } },
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    // Verificar se todos os holerites da folha foram pagos
+    await this.updatePayrollStatusIfNeeded(payslip.payrollId)
+
+    return {
+      success: true,
+      message: 'Holerite pago com sucesso',
+      payslip: this.formatPayslip(updated),
+    }
+  }
+
+  // Pagar múltiplos holerites
+  async payMultiplePayslips(payslipIds: string[], userId: string) {
+    const payslips = await this.prisma.payslip.findMany({
+      where: { id: { in: payslipIds } },
+    })
+
+    // Só pode pagar holerites que foram aceitos pelo funcionário
+    const notAccepted = payslips.filter(p => p.status !== 'ACCEPTED')
+    if (notAccepted.length > 0) {
+      throw new BadRequestException(`${notAccepted.length} holerite(s) não foram aceitos pelo funcionário`)
+    }
+
+    await this.prisma.payslip.updateMany({
+      where: { id: { in: payslipIds } },
+      data: {
+        status: 'PAID',
+        paidAt: new Date(),
+      },
+    })
+
+    // Atualizar status das folhas afetadas
+    const payrollIds = [...new Set(payslips.map(p => p.payrollId))]
+    for (const payrollId of payrollIds) {
+      await this.updatePayrollStatusIfNeeded(payrollId)
+    }
+
+    return {
+      success: true,
+      message: `${payslipIds.length} holerite(s) pago(s) com sucesso`,
+      paidCount: payslipIds.length,
+    }
+  }
+
+  // Atualizar status da folha baseado nos holerites
+  private async updatePayrollStatusIfNeeded(payrollId: string) {
+    const payslips = await this.prisma.payslip.findMany({
+      where: { payrollId },
+    })
+
+    if (payslips.length === 0) return
+
+    // Novo fluxo: CALCULATED -> APPROVED -> ACCEPTED/REJECTED -> PAID
+    const allPaid = payslips.every(p => p.status === 'PAID')
+    const allAcceptedOrPaid = payslips.every(p => p.status === 'ACCEPTED' || p.status === 'PAID')
+    const allApprovedOrBetter = payslips.every(p => 
+      p.status === 'APPROVED' || p.status === 'ACCEPTED' || p.status === 'REJECTED' || p.status === 'PAID'
+    )
+    const allCalculatedOrBetter = payslips.every(p => 
+      p.status === 'CALCULATED' || p.status === 'APPROVED' || p.status === 'ACCEPTED' || p.status === 'REJECTED' || p.status === 'PAID'
+    )
+
+    let newStatus: PayrollStatus | null = null
+
+    if (allPaid) {
+      newStatus = PayrollStatus.PAID
+    } else if (allAcceptedOrPaid) {
+      // Todos aceitos pelo funcionário (prontos para pagar)
+      newStatus = PayrollStatus.APPROVED
+    } else if (allApprovedOrBetter) {
+      // Todos aprovados pelo admin (aguardando aceite do funcionário)
+      newStatus = PayrollStatus.APPROVED
+    } else if (allCalculatedOrBetter) {
+      // Todos calculados = em revisão
+      newStatus = PayrollStatus.REVIEW
+    }
+
+    if (newStatus) {
+      await this.prisma.payroll.update({
+        where: { id: payrollId },
+        data: { 
+          status: newStatus,
+          ...(newStatus === PayrollStatus.PAID ? { paidAt: new Date() } : {}),
+          ...(newStatus === PayrollStatus.APPROVED ? { closedAt: new Date() } : {}),
+        },
+      })
+    }
+  }
+
   // Recalcular totais da folha de pagamento
   private async recalculatePayrollTotals(payrollId: string) {
     const payslips = await this.prisma.payslip.findMany({
@@ -1126,8 +1594,6 @@ export class PayrollService {
       ...config,
       // Adicional noturno
       nightShiftPercentage: Number(config.nightShiftPercentage || 20),
-      // Adiantamento salarial
-      salaryAdvancePercentage: config.salaryAdvancePercentage ? Number(config.salaryAdvancePercentage) : null,
       // Vale avulso
       maxExtraAdvancePercentage: config.maxExtraAdvancePercentage ? Number(config.maxExtraAdvancePercentage) : null,
       // Benefícios
@@ -1137,6 +1603,12 @@ export class PayrollService {
       healthInsuranceValue: Number(config.healthInsuranceValue),
       dentalInsuranceValue: Number(config.dentalInsuranceValue),
       workHoursPerDay: Number(config.workHoursPerDay),
+      // Modo de pagamento flexível
+      advancePercent: Number(config.advancePercent || 40),
+      installment1Percent: Number(config.installment1Percent || 50),
+      installment2Percent: Number(config.installment2Percent || 50),
+      installment3Percent: Number(config.installment3Percent || 0),
+      installment4Percent: Number(config.installment4Percent || 0),
     }
   }
 
@@ -1191,6 +1663,11 @@ export class PayrollService {
       netSalary: Number(payslip.netSalary),
       salaryAdvanceValue: Number(payslip.salaryAdvanceValue || 0),
       extraAdvanceValue: Number(payslip.extraAdvanceValue || 0),
+      installments: payslip.installments?.map((i: any) => ({
+        ...i,
+        percentage: Number(i.percentage),
+        amount: Number(i.amount),
+      })) || [],
     }
   }
 
@@ -1198,6 +1675,11 @@ export class PayrollService {
   async listEmployeePayslips(employeeId: string) {
     const payslips = await this.prisma.payslip.findMany({
       where: { employeeId },
+      include: {
+        installments: {
+          orderBy: { installmentNumber: 'asc' },
+        },
+      },
       orderBy: [
         { referenceYear: 'desc' },
         { referenceMonth: 'desc' },
@@ -1207,6 +1689,448 @@ export class PayrollService {
     return {
       success: true,
       payslips: payslips.map(p => this.formatPayslip(p)),
+    }
+  }
+
+  // Previsão em tempo real do holerite (sem salvar no banco)
+  // Usado no dashboard do funcionário para mostrar estimativa antes do fechamento
+  async getPayslipPreview(employeeId: string, month: number, year: number) {
+    // Buscar funcionário com todos os dados necessários
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        user: true,
+        company: {
+          include: {
+            payrollConfig: true,
+          },
+        },
+        position: true,
+        department: true,
+        benefits: {
+          include: { benefit: true },
+          where: { benefit: { active: true } },
+        },
+        timeEntries: {
+          where: {
+            timestamp: {
+              gte: new Date(year, month - 1, 1),
+              lt: new Date(year, month, 1),
+            },
+          },
+        },
+      },
+    })
+
+    if (!employee) {
+      return { success: false, error: 'Funcionário não encontrado' }
+    }
+
+    const config = employee.company?.payrollConfig
+    if (!config) {
+      return { success: false, error: 'Configuração de folha não encontrada' }
+    }
+
+    // Buscar adiantamentos do mês
+    const advances = await this.prisma.advance.findMany({
+      where: {
+        employeeId,
+        referenceMonth: month,
+        referenceYear: year,
+        status: { in: ['APPROVED', 'PAID'] },
+      },
+    })
+
+    // Buscar atestados médicos aprovados do mês
+    const certificates = await this.prisma.medicalCertificate.findMany({
+      where: {
+        employeeId,
+        status: 'APPROVED',
+        startDate: {
+          gte: new Date(year, month - 1, 1),
+          lt: new Date(year, month, 1),
+        },
+      },
+    })
+
+    // Calcular dias justificados por atestado
+    const justifiedAbsenceDays = certificates.reduce((sum, cert) => sum + cert.days, 0)
+
+    // Buscar períodos de férias do mês
+    const startOfMonth = new Date(year, month - 1, 1)
+    const endOfMonth = new Date(year, month, 0)
+    
+    const vacationPeriods = await this.prisma.vacationPeriod.findMany({
+      where: {
+        vacation: {
+          employeeId,
+          status: { in: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] },
+        },
+        OR: [
+          { startDate: { gte: startOfMonth, lte: endOfMonth } },
+          { endDate: { gte: startOfMonth, lte: endOfMonth } },
+          { AND: [{ startDate: { lte: startOfMonth } }, { endDate: { gte: endOfMonth } }] },
+        ],
+        status: { in: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] },
+      },
+    })
+
+    // Calcular dias de férias no mês
+    let vacationDaysInMonth = 0
+    for (const period of vacationPeriods) {
+      const periodStart = period.startDate > startOfMonth ? period.startDate : startOfMonth
+      const periodEnd = period.endDate < endOfMonth ? period.endDate : endOfMonth
+      const diffTime = Math.abs(periodEnd.getTime() - periodStart.getTime())
+      const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+      vacationDaysInMonth += days
+    }
+
+    // Calcular dados do holerite usando o método existente
+    // O método calculatePayslip espera: (employee, entries, month, year, config, advances, justifiedAbsenceDays, vacationDaysInMonth)
+    const payslipData = this.calculatePayslip(
+      employee,
+      employee.timeEntries || [],
+      month,
+      year,
+      config,
+      advances,
+      justifiedAbsenceDays,
+      vacationDaysInMonth
+    )
+
+    // Verificar se já existe holerite oficial para este mês
+    const existingPayslip = await this.prisma.payslip.findFirst({
+      where: {
+        employeeId,
+        referenceMonth: month,
+        referenceYear: year,
+      },
+    })
+
+    // Calcular dias restantes no mês
+    const today = new Date()
+    const lastDayOfMonth = new Date(year, month, 0).getDate()
+    const currentDay = today.getMonth() + 1 === month && today.getFullYear() === year 
+      ? today.getDate() 
+      : lastDayOfMonth
+    const daysRemaining = lastDayOfMonth - currentDay
+
+    return {
+      success: true,
+      isPreview: true, // Indica que é uma previsão, não um holerite oficial
+      hasOfficialPayslip: !!existingPayslip,
+      officialPayslipId: existingPayslip?.id || null,
+      officialPayslipStatus: existingPayslip?.status || null,
+      referenceMonth: month,
+      referenceYear: year,
+      daysRemaining, // Dias restantes até o fechamento
+      lastDayOfMonth,
+      currentDay,
+      // Dados do funcionário
+      employee: {
+        id: employee.id,
+        name: employee.user?.name || 'Sem nome',
+        position: employee.position?.name || null,
+        department: employee.department?.name || null,
+        registrationId: employee.registrationId,
+        baseSalary: Number(employee.baseSalary),
+      },
+      // Dados calculados
+      preview: {
+        ...payslipData,
+        // Arredondar valores para 2 casas decimais
+        baseSalary: Math.round(payslipData.baseSalary * 100) / 100,
+        totalEarnings: Math.round(payslipData.totalEarnings * 100) / 100,
+        totalDeductions: Math.round(payslipData.totalDeductions * 100) / 100,
+        netSalary: Math.round(payslipData.netSalary * 100) / 100,
+        inssValue: Math.round(payslipData.inssValue * 100) / 100,
+        irValue: Math.round(payslipData.irValue * 100) / 100,
+        transportVoucher: Math.round(payslipData.transportVoucher * 100) / 100,
+        healthInsurance: Math.round(payslipData.healthInsurance * 100) / 100,
+        lateValue: Math.round(payslipData.lateValue * 100) / 100,
+        absenceValue: Math.round(payslipData.absenceValue * 100) / 100,
+        fgtsValue: Math.round(payslipData.fgtsValue * 100) / 100,
+      },
+      // Configurações relevantes
+      config: {
+        enableLateDiscount: config.enableLateDiscount,
+        enableInss: config.enableInss,
+        enableIrrf: config.enableIrrf,
+        enableFgts: config.enableFgts,
+      },
+    }
+  }
+
+  // ==========================================
+  // PARCELAS DE PAGAMENTO (INSTALLMENTS)
+  // ==========================================
+
+  // Gerar parcelas de pagamento para um holerite
+  async generateInstallments(
+    payslipId: string,
+    netSalary: number,
+    referenceMonth: number,
+    referenceYear: number,
+    config: any,
+    employee: any
+  ) {
+    // Deletar parcelas existentes
+    await this.prisma.payslipInstallment.deleteMany({
+      where: { payslipId },
+    })
+
+    const installments: any[] = []
+    const paymentMode = config.paymentMode || 'FULL'
+
+    if (paymentMode === 'FULL') {
+      // Pagamento único - 100% em uma data
+      const day = employee.customPaymentDay1 || config.fullPaymentDay || 5
+      const dueDate = new Date(referenceYear, referenceMonth, day) // Mês seguinte
+      
+      installments.push({
+        payslipId,
+        installmentNumber: 1,
+        totalInstallments: 1,
+        percentage: 100,
+        amount: netSalary,
+        dueDate,
+      })
+    } else if (paymentMode === 'ADVANCE') {
+      // Adiantamento - 2 parcelas (ex: 40% dia 15 + 60% dia 5)
+      const advancePercent = Number(config.advancePercent || 40)
+      const balancePercent = 100 - advancePercent
+      
+      const advanceDay = employee.customPaymentDay1 || config.advancePaymentDay || 15
+      const balanceDay = employee.customPaymentDay2 || config.balancePaymentDay || 5
+      
+      // Parcela 1: Adiantamento (mesmo mês)
+      const advanceDueDate = new Date(referenceYear, referenceMonth - 1, advanceDay)
+      installments.push({
+        payslipId,
+        installmentNumber: 1,
+        totalInstallments: 2,
+        percentage: advancePercent,
+        amount: Math.round((netSalary * advancePercent / 100) * 100) / 100,
+        dueDate: advanceDueDate,
+      })
+      
+      // Parcela 2: Saldo (mês seguinte)
+      const balanceDueDate = new Date(referenceYear, referenceMonth, balanceDay)
+      installments.push({
+        payslipId,
+        installmentNumber: 2,
+        totalInstallments: 2,
+        percentage: balancePercent,
+        amount: Math.round((netSalary * balancePercent / 100) * 100) / 100,
+        dueDate: balanceDueDate,
+      })
+    } else if (paymentMode === 'INSTALLMENTS') {
+      // Parcelado - 2 ou 4 parcelas
+      const count = config.installmentCount || 2
+      const totalInstallments = count === 4 ? 4 : 2
+      
+      const percentages = [
+        Number(config.installment1Percent || (count === 2 ? 50 : 25)),
+        Number(config.installment2Percent || (count === 2 ? 50 : 25)),
+        Number(config.installment3Percent || 25),
+        Number(config.installment4Percent || 25),
+      ]
+      
+      const days = [
+        employee.customPaymentDay1 || config.installment1Day || 7,
+        employee.customPaymentDay2 || config.installment2Day || 14,
+        employee.customPaymentDay3 || config.installment3Day || 21,
+        employee.customPaymentDay4 || config.installment4Day || 28,
+      ]
+      
+      for (let i = 0; i < totalInstallments; i++) {
+        const percentage = percentages[i]
+        const day = days[i]
+        const dueDate = new Date(referenceYear, referenceMonth - 1, day)
+        
+        installments.push({
+          payslipId,
+          installmentNumber: i + 1,
+          totalInstallments,
+          percentage,
+          amount: Math.round((netSalary * percentage / 100) * 100) / 100,
+          dueDate,
+        })
+      }
+    }
+
+    // Criar parcelas no banco
+    for (const inst of installments) {
+      await this.prisma.payslipInstallment.create({ data: inst })
+    }
+
+    return installments
+  }
+
+  // Listar parcelas de um holerite
+  async listPayslipInstallments(payslipId: string) {
+    const installments = await this.prisma.payslipInstallment.findMany({
+      where: { payslipId },
+      orderBy: { installmentNumber: 'asc' },
+    })
+
+    return {
+      success: true,
+      installments: installments.map(i => ({
+        ...i,
+        percentage: Number(i.percentage),
+        amount: Number(i.amount),
+      })),
+    }
+  }
+
+  // Pagar uma parcela específica
+  async payInstallment(installmentId: string, paidBy: string) {
+    const installment = await this.prisma.payslipInstallment.findUnique({
+      where: { id: installmentId },
+      include: { payslip: true },
+    })
+
+    if (!installment) {
+      throw new NotFoundException('Parcela não encontrada')
+    }
+
+    if (installment.paidAt) {
+      throw new BadRequestException('Parcela já foi paga')
+    }
+
+    // Atualizar parcela como paga
+    const updated = await this.prisma.payslipInstallment.update({
+      where: { id: installmentId },
+      data: {
+        paidAt: new Date(),
+        paidBy,
+      },
+    })
+
+    // Verificar se todas as parcelas foram pagas
+    const allInstallments = await this.prisma.payslipInstallment.findMany({
+      where: { payslipId: installment.payslipId },
+    })
+
+    const allPaid = allInstallments.every(i => i.paidAt !== null)
+
+    // Se todas pagas, marcar holerite como PAID
+    if (allPaid) {
+      await this.prisma.payslip.update({
+        where: { id: installment.payslipId },
+        data: {
+          status: 'PAID',
+          paidAt: new Date(),
+        },
+      })
+
+      // Emitir evento WebSocket
+      const payslip = await this.prisma.payslip.findUnique({
+        where: { id: installment.payslipId },
+        include: { payroll: true },
+      })
+      if (payslip?.payroll) {
+        this.eventsGateway.emitPayslipPaid(payslip.payroll.companyId, this.formatPayslip(payslip))
+      }
+    }
+
+    return {
+      success: true,
+      message: allPaid ? 'Parcela paga - Holerite totalmente quitado!' : 'Parcela paga com sucesso',
+      installment: {
+        ...updated,
+        percentage: Number(updated.percentage),
+        amount: Number(updated.amount),
+      },
+      allPaid,
+    }
+  }
+
+  // Pagar todas as parcelas pendentes de um holerite
+  async payAllInstallments(payslipId: string, paidBy: string) {
+    const installments = await this.prisma.payslipInstallment.findMany({
+      where: { payslipId, paidAt: null },
+    })
+
+    if (installments.length === 0) {
+      throw new BadRequestException('Não há parcelas pendentes')
+    }
+
+    // Pagar todas as parcelas pendentes
+    await this.prisma.payslipInstallment.updateMany({
+      where: { payslipId, paidAt: null },
+      data: {
+        paidAt: new Date(),
+        paidBy,
+      },
+    })
+
+    // Marcar holerite como PAID
+    await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: {
+        status: 'PAID',
+        paidAt: new Date(),
+      },
+    })
+
+    // Emitir evento WebSocket
+    const payslip = await this.prisma.payslip.findUnique({
+      where: { id: payslipId },
+      include: { payroll: true },
+    })
+    if (payslip?.payroll) {
+      this.eventsGateway.emitPayslipPaid(payslip.payroll.companyId, this.formatPayslip(payslip))
+    }
+
+    return {
+      success: true,
+      message: `${installments.length} parcela(s) paga(s) - Holerite totalmente quitado!`,
+      paidCount: installments.length,
+    }
+  }
+
+  // Listar parcelas atrasadas (para alertas)
+  async listOverdueInstallments(companyId: string) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const overdueInstallments = await this.prisma.payslipInstallment.findMany({
+      where: {
+        payslip: { companyId },
+        paidAt: null,
+        dueDate: { lt: today },
+      },
+      include: {
+        payslip: {
+          include: {
+            employee: {
+              include: { user: { select: { name: true } } },
+            },
+          },
+        },
+      },
+      orderBy: { dueDate: 'asc' },
+    })
+
+    return {
+      success: true,
+      overdueCount: overdueInstallments.length,
+      installments: overdueInstallments.map(i => ({
+        id: i.id,
+        payslipId: i.payslipId,
+        installmentNumber: i.installmentNumber,
+        totalInstallments: i.totalInstallments,
+        percentage: Number(i.percentage),
+        amount: Number(i.amount),
+        dueDate: i.dueDate,
+        daysOverdue: Math.floor((today.getTime() - new Date(i.dueDate).getTime()) / (1000 * 60 * 60 * 24)),
+        employeeId: i.payslip.employeeId,
+        employeeName: i.payslip.employee?.user?.name || i.payslip.employeeName,
+        referenceMonth: i.payslip.referenceMonth,
+        referenceYear: i.payslip.referenceYear,
+      })),
     }
   }
 
@@ -1310,6 +2234,171 @@ export class PayrollService {
     return {
       success: true,
       message: 'Holerite assinado com sucesso',
+      payslip: this.formatPayslip(updated),
+    }
+  }
+
+  // ==========================================
+  // ACEITE/REJEIÇÃO DO FUNCIONÁRIO
+  // ==========================================
+
+  // Funcionário aceita o holerite (👍)
+  async acceptPayslip(payslipId: string, employeeId: string) {
+    const payslip = await this.prisma.payslip.findUnique({
+      where: { id: payslipId },
+    })
+
+    if (!payslip) {
+      throw new NotFoundException('Holerite não encontrado')
+    }
+
+    // Verificar se o holerite pertence ao funcionário
+    if (payslip.employeeId !== employeeId) {
+      throw new BadRequestException('Você não tem permissão para aceitar este holerite')
+    }
+
+    // Não pode aceitar holerite já aceito, rejeitado ou pago
+    if (payslip.status === 'ACCEPTED' || payslip.status === 'REJECTED' || payslip.status === 'PAID') {
+      throw new BadRequestException('Este holerite não pode ser aceito')
+    }
+
+    const updated = await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt: new Date(),
+        rejectedAt: null,
+        rejectionReason: null,
+      },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true, avatarUrl: true } },
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    // Atualizar status da folha se necessário
+    await this.updatePayrollStatusIfNeeded(payslip.payrollId)
+
+    // Emitir evento WebSocket para atualização em tempo real
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payslip.payrollId } })
+    if (payroll) {
+      this.eventsGateway.emitPayslipAccepted(payroll.companyId, this.formatPayslip(updated))
+    }
+
+    return {
+      success: true,
+      message: 'Holerite aceito com sucesso',
+      payslip: this.formatPayslip(updated),
+    }
+  }
+
+  // Funcionário rejeita o holerite (👎)
+  async rejectPayslip(payslipId: string, employeeId: string, reason: string) {
+    if (!reason || reason.trim().length === 0) {
+      throw new BadRequestException('É necessário informar o motivo da rejeição')
+    }
+
+    const payslip = await this.prisma.payslip.findUnique({
+      where: { id: payslipId },
+    })
+
+    if (!payslip) {
+      throw new NotFoundException('Holerite não encontrado')
+    }
+
+    // Verificar se o holerite pertence ao funcionário
+    if (payslip.employeeId !== employeeId) {
+      throw new BadRequestException('Você não tem permissão para rejeitar este holerite')
+    }
+
+    // Não pode rejeitar holerite já aceito, rejeitado ou pago
+    if (payslip.status === 'ACCEPTED' || payslip.status === 'REJECTED' || payslip.status === 'PAID') {
+      throw new BadRequestException('Este holerite não pode ser rejeitado')
+    }
+
+    const updated = await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        rejectionReason: reason.trim(),
+        acceptedAt: null,
+      },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true, avatarUrl: true } },
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    // Atualizar status da folha se necessário
+    await this.updatePayrollStatusIfNeeded(payslip.payrollId)
+
+    // Emitir evento WebSocket para atualização em tempo real
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payslip.payrollId } })
+    if (payroll) {
+      this.eventsGateway.emitPayslipRejected(payroll.companyId, this.formatPayslip(updated))
+    }
+
+    return {
+      success: true,
+      message: 'Holerite rejeitado. O motivo foi registrado.',
+      payslip: this.formatPayslip(updated),
+    }
+  }
+
+  // Admin reaprova holerite rejeitado (após correção)
+  async reapprovePayslip(payslipId: string, userId: string) {
+    const payslip = await this.prisma.payslip.findUnique({
+      where: { id: payslipId },
+    })
+
+    if (!payslip) {
+      throw new NotFoundException('Holerite não encontrado')
+    }
+
+    // Só pode reaprovar holerite que foi rejeitado
+    if (payslip.status !== 'REJECTED') {
+      throw new BadRequestException('Apenas holerites rejeitados podem ser reaprovados')
+    }
+
+    const updated = await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        ...(userId && userId !== 'system' ? { approvedBy: userId } : {}),
+        // Limpar dados de rejeição anterior
+        rejectedAt: null,
+        rejectionReason: null,
+        acceptedAt: null,
+      },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true, avatarUrl: true } },
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    // Atualizar status da folha se necessário
+    await this.updatePayrollStatusIfNeeded(payslip.payrollId)
+
+    return {
+      success: true,
+      message: 'Holerite reaprovado com sucesso',
       payslip: this.formatPayslip(updated),
     }
   }
@@ -1735,5 +2824,356 @@ export class PayrollService {
       success: true,
       message: 'Adiantamento cancelado',
     }
+  }
+
+  // ==========================================
+  // ATESTADOS MÉDICOS
+  // ==========================================
+
+  // Listar atestados médicos
+  async listMedicalCertificates(companyId: string, filters: {
+    employeeId?: string
+    status?: string
+    month?: number
+    year?: number
+  }) {
+    try {
+      console.log('[PayrollService] listMedicalCertificates START', { companyId, filters })
+      
+      const where: any = { companyId }
+      
+      if (filters.employeeId) where.employeeId = filters.employeeId
+      if (filters.status) where.status = filters.status
+      
+      // Filtrar por mês/ano (atestados que cobrem o período)
+      if (filters.month && filters.year) {
+        const startOfMonth = new Date(filters.year, filters.month - 1, 1)
+        const endOfMonth = new Date(filters.year, filters.month, 0)
+        where.OR = [
+          { startDate: { gte: startOfMonth, lte: endOfMonth } },
+          { endDate: { gte: startOfMonth, lte: endOfMonth } },
+          { AND: [{ startDate: { lte: startOfMonth } }, { endDate: { gte: endOfMonth } }] },
+        ]
+      }
+
+      console.log('[PayrollService] listMedicalCertificates WHERE:', JSON.stringify(where))
+
+      const certificates = await this.prisma.medicalCertificate.findMany({
+        where,
+        include: {
+          employee: {
+            include: {
+              user: { select: { name: true, avatarUrl: true } },
+              position: { select: { name: true } },
+              department: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { startDate: 'desc' },
+      })
+
+      console.log('[PayrollService] listMedicalCertificates FOUND:', certificates.length)
+
+      return {
+        success: true,
+        certificates: certificates.map(c => ({
+          ...c,
+          employeeName: c.employee?.user?.name || 'Sem nome',
+          employeePosition: c.employee?.position?.name || null,
+          employeeDepartment: c.employee?.department?.name || null,
+          employeeAvatar: c.employee?.user?.avatarUrl || null,
+        })),
+      }
+    } catch (error) {
+      console.error('[PayrollService] listMedicalCertificates ERROR:', error)
+      throw error
+    }
+  }
+
+  // Buscar atestado médico por ID
+  async getMedicalCertificate(id: string) {
+    const certificate = await this.prisma.medicalCertificate.findUnique({
+      where: { id },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true, avatarUrl: true } },
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    if (!certificate) {
+      throw new NotFoundException('Atestado não encontrado')
+    }
+
+    return {
+      success: true,
+      certificate: {
+        ...certificate,
+        employeeName: certificate.employee?.user?.name || 'Sem nome',
+        employeePosition: certificate.employee?.position?.name || null,
+        employeeDepartment: certificate.employee?.department?.name || null,
+        employeeAvatar: certificate.employee?.user?.avatarUrl || null,
+      },
+    }
+  }
+
+  // Criar atestado médico
+  async createMedicalCertificate(companyId: string, data: {
+    employeeId: string
+    startDate: string
+    endDate: string
+    reason?: string
+    doctorName?: string
+    doctorCrm?: string
+    attachmentUrl?: string
+    notes?: string
+  }) {
+    const startDate = new Date(data.startDate)
+    const endDate = new Date(data.endDate)
+    
+    // Calcular dias
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
+    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+
+    const certificate = await this.prisma.medicalCertificate.create({
+      data: {
+        companyId,
+        employeeId: data.employeeId,
+        startDate,
+        endDate,
+        days,
+        reason: data.reason,
+        doctorName: data.doctorName,
+        doctorCrm: data.doctorCrm,
+        attachmentUrl: data.attachmentUrl,
+        notes: data.notes,
+        status: 'PENDING',
+      },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    return {
+      success: true,
+      message: `Atestado de ${days} dia(s) criado com sucesso`,
+      certificate,
+    }
+  }
+
+  // Atualizar atestado médico
+  async updateMedicalCertificate(id: string, data: {
+    startDate?: string
+    endDate?: string
+    reason?: string
+    doctorName?: string
+    doctorCrm?: string
+    attachmentUrl?: string
+    notes?: string
+  }) {
+    const existing = await this.prisma.medicalCertificate.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Atestado não encontrado')
+    if (existing.status !== 'PENDING') {
+      throw new BadRequestException('Apenas atestados pendentes podem ser editados')
+    }
+
+    const updateData: any = {}
+    
+    if (data.startDate) updateData.startDate = new Date(data.startDate)
+    if (data.endDate) updateData.endDate = new Date(data.endDate)
+    if (data.reason !== undefined) updateData.reason = data.reason
+    if (data.doctorName !== undefined) updateData.doctorName = data.doctorName
+    if (data.doctorCrm !== undefined) updateData.doctorCrm = data.doctorCrm
+    if (data.attachmentUrl !== undefined) updateData.attachmentUrl = data.attachmentUrl
+    if (data.notes !== undefined) updateData.notes = data.notes
+
+    // Recalcular dias se datas mudaram
+    if (data.startDate || data.endDate) {
+      const startDate = data.startDate ? new Date(data.startDate) : existing.startDate
+      const endDate = data.endDate ? new Date(data.endDate) : existing.endDate
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
+      updateData.days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+    }
+
+    const certificate = await this.prisma.medicalCertificate.update({
+      where: { id },
+      data: updateData,
+    })
+
+    return {
+      success: true,
+      message: 'Atestado atualizado',
+      certificate,
+    }
+  }
+
+  // Aprovar atestado médico
+  async approveMedicalCertificate(id: string, userId: string) {
+    const existing = await this.prisma.medicalCertificate.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Atestado não encontrado')
+    if (existing.status !== 'PENDING') {
+      throw new BadRequestException('Apenas atestados pendentes podem ser aprovados')
+    }
+
+    const certificate = await this.prisma.medicalCertificate.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        approvedBy: userId !== 'system' ? userId : null,
+      },
+      include: {
+        employee: {
+          include: {
+            user: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    return {
+      success: true,
+      message: `Atestado de ${certificate.days} dia(s) aprovado`,
+      certificate,
+    }
+  }
+
+  // Rejeitar atestado médico
+  async rejectMedicalCertificate(id: string, userId: string, reason?: string) {
+    const existing = await this.prisma.medicalCertificate.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Atestado não encontrado')
+    if (existing.status !== 'PENDING') {
+      throw new BadRequestException('Apenas atestados pendentes podem ser rejeitados')
+    }
+
+    const certificate = await this.prisma.medicalCertificate.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        rejectedBy: userId !== 'system' ? userId : null,
+        rejectionReason: reason,
+      },
+    })
+
+    return {
+      success: true,
+      message: 'Atestado rejeitado',
+      certificate,
+    }
+  }
+
+  // Excluir atestado médico
+  async deleteMedicalCertificate(id: string) {
+    const existing = await this.prisma.medicalCertificate.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Atestado não encontrado')
+
+    await this.prisma.medicalCertificate.delete({ where: { id } })
+
+    return {
+      success: true,
+      message: 'Atestado excluído',
+    }
+  }
+
+  // Estatísticas de atestados médicos
+  async getMedicalCertificateStats(companyId: string) {
+    const now = new Date()
+    const month = now.getMonth() + 1
+    const year = now.getFullYear()
+    const startOfMonth = new Date(year, month - 1, 1)
+    const endOfMonth = new Date(year, month, 0)
+
+    const [pending, approved, rejected, totalDaysThisMonth] = await Promise.all([
+      this.prisma.medicalCertificate.count({ where: { companyId, status: 'PENDING' } }),
+      this.prisma.medicalCertificate.count({ where: { companyId, status: 'APPROVED' } }),
+      this.prisma.medicalCertificate.count({ where: { companyId, status: 'REJECTED' } }),
+      this.prisma.medicalCertificate.aggregate({
+        where: {
+          companyId,
+          status: 'APPROVED',
+          OR: [
+            { startDate: { gte: startOfMonth, lte: endOfMonth } },
+            { endDate: { gte: startOfMonth, lte: endOfMonth } },
+          ],
+        },
+        _sum: { days: true },
+      }),
+    ])
+
+    // Funcionários com mais atestados no ano
+    const topEmployees = await this.prisma.medicalCertificate.groupBy({
+      by: ['employeeId'],
+      where: {
+        companyId,
+        status: 'APPROVED',
+        startDate: { gte: new Date(year, 0, 1) },
+      },
+      _sum: { days: true },
+      _count: true,
+      orderBy: { _sum: { days: 'desc' } },
+      take: 5,
+    })
+
+    // Buscar nomes dos funcionários
+    const employeeIds = topEmployees.map(e => e.employeeId)
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      include: { user: { select: { name: true } } },
+    })
+    const employeeMap = new Map(employees.map(e => [e.id, e.user?.name || 'Sem nome']))
+
+    return {
+      success: true,
+      stats: {
+        pending,
+        approved,
+        rejected,
+        totalDaysThisMonth: totalDaysThisMonth._sum.days || 0,
+        topEmployees: topEmployees.map(e => ({
+          employeeId: e.employeeId,
+          employeeName: employeeMap.get(e.employeeId) || 'Sem nome',
+          totalDays: e._sum.days || 0,
+          count: e._count,
+        })),
+      },
+    }
+  }
+
+  // Buscar atestados aprovados de um funcionário em um período (para cálculo de faltas)
+  async getApprovedCertificatesForPeriod(employeeId: string, month: number, year: number) {
+    const startOfMonth = new Date(year, month - 1, 1)
+    const endOfMonth = new Date(year, month, 0)
+
+    const certificates = await this.prisma.medicalCertificate.findMany({
+      where: {
+        employeeId,
+        status: 'APPROVED',
+        OR: [
+          { startDate: { gte: startOfMonth, lte: endOfMonth } },
+          { endDate: { gte: startOfMonth, lte: endOfMonth } },
+          { AND: [{ startDate: { lte: startOfMonth } }, { endDate: { gte: endOfMonth } }] },
+        ],
+      },
+    })
+
+    // Calcular dias justificados no mês
+    let justifiedDays = 0
+    for (const cert of certificates) {
+      const certStart = cert.startDate > startOfMonth ? cert.startDate : startOfMonth
+      const certEnd = cert.endDate < endOfMonth ? cert.endDate : endOfMonth
+      const diffTime = Math.abs(certEnd.getTime() - certStart.getTime())
+      justifiedDays += Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+    }
+
+    return { certificates, justifiedDays }
   }
 }

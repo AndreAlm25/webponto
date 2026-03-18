@@ -88,6 +88,10 @@ const PERMISSIONS: PermissionDef[] = [
   { module: 'settings', action: 'view', key: 'settings.view', description: 'Visualizar configurações' },
   { module: 'settings', action: 'edit', key: 'settings.edit', description: 'Editar configurações' },
 
+  // EMPRESA (2)
+  { module: 'company', action: 'view', key: 'company.view', description: 'Visualizar dados da empresa' },
+  { module: 'company', action: 'edit', key: 'company.edit', description: 'Editar dados da empresa' },
+
   // PERMISSÕES (2)
   { module: 'permissions', action: 'view', key: 'permissions.view', description: 'Visualizar permissões' },
   { module: 'permissions', action: 'edit', key: 'permissions.edit', description: 'Editar permissões' },

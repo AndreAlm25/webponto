@@ -17,21 +17,18 @@ export function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteP
   const { user, loading } = useAuth()
   const router = useRouter()
 
-  useEffect(() => {
-    console.log('🔒 [ProtectedRoute] Verificando autenticação...')
-    console.log('   - loading:', loading)
-    console.log('   - user:', user ? 'autenticado' : 'não autenticado')
-    console.log('   - requireAuth:', requireAuth)
+  // Verifica se há token no localStorage (para evitar redirect prematuro em conexões lentas)
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token')
 
-    if (!loading && requireAuth && !user) {
-      console.error('❌ [ProtectedRoute] Usuário não autenticado! Redirecionando para /login')
+  useEffect(() => {
+    // Só redireciona se: terminou de carregar E não há usuário E não há token salvo
+    if (!loading && requireAuth && !user && !hasToken) {
       router.push('/login')
     }
-  }, [user, loading, requireAuth, router])
+  }, [user, loading, requireAuth, router, hasToken])
 
-  // Exibe loading enquanto verifica autenticação
-  if (loading) {
-    console.log('⏳ [ProtectedRoute] Verificando autenticação...')
+  // Exibe loading enquanto verifica autenticação OU enquanto há token mas user ainda não carregou
+  if (loading || (requireAuth && !user && hasToken)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -42,14 +39,10 @@ export function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteP
     )
   }
 
-  // Se requer autenticação mas não está autenticado, não renderiza nada
-  // (o useEffect já redirecionou para /login)
+  // Sem token e sem usuário — não renderiza nada (useEffect já redirecionou)
   if (requireAuth && !user) {
-    console.log('🚫 [ProtectedRoute] Bloqueando acesso - usuário não autenticado')
     return null
   }
 
-  // Usuário autenticado, renderiza conteúdo
-  console.log('✅ [ProtectedRoute] Usuário autenticado, permitindo acesso')
   return <>{children}</>
 }

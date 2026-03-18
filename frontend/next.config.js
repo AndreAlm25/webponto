@@ -44,14 +44,15 @@ const nextConfig = {
     ],
   },
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000',
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || '',
   },
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:4000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },
