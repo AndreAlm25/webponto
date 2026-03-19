@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import { UpdateCompanyDto } from './dto/update-company.dto'
+import { EmailService } from '../../common/email.service'
 
 @Injectable()
 export class CompanyService {
   private readonly logger = new Logger(CompanyService.name)
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async getCompany(companyId: string) {
     const company = await this.prisma.company.findUnique({
@@ -22,6 +26,51 @@ export class CompanyService {
     }
 
     return company
+  }
+
+  async getSmtpConfig(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { smtpEnabled: true, smtpHost: true, smtpPort: true, smtpUser: true, smtpFrom: true },
+    })
+    if (!company) throw new NotFoundException('Empresa não encontrada')
+    return company
+  }
+
+  async updateSmtpConfig(companyId: string, dto: {
+    smtpEnabled: boolean
+    smtpHost?: string
+    smtpPort?: number
+    smtpUser?: string
+    smtpPass?: string
+    smtpFrom?: string
+  }) {
+    return this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        smtpEnabled: dto.smtpEnabled,
+        smtpHost: dto.smtpHost || null,
+        smtpPort: dto.smtpPort || null,
+        smtpUser: dto.smtpUser || null,
+        smtpPass: dto.smtpPass || null,
+        smtpFrom: dto.smtpFrom || null,
+      },
+      select: { smtpEnabled: true, smtpHost: true, smtpPort: true, smtpUser: true, smtpFrom: true },
+    })
+  }
+
+  async testSmtpConfig(companyId: string, dto: {
+    smtpHost: string
+    smtpPort: number
+    smtpUser: string
+    smtpPass: string
+    smtpFrom: string
+    testTo: string
+  }) {
+    return this.emailService.testSmtp(
+      { host: dto.smtpHost, port: dto.smtpPort, user: dto.smtpUser, pass: dto.smtpPass, from: dto.smtpFrom },
+      dto.testTo,
+    )
   }
 
   async updateCompany(companyId: string, dto: UpdateCompanyDto) {

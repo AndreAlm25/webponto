@@ -65,6 +65,14 @@ model Company {
   dashboardShowRemoteClock    Boolean      @default(true)
   dashboardShowOvertime       Boolean      @default(true)
   dashboardShowAlerts         Boolean      @default(true)
+  // Configuração de Email (SMTP por empresa)
+  smtpHost                 String?                      // Servidor SMTP (ex: smtp.gmail.com)
+  smtpPort                 Int?                         // Porta SMTP (ex: 587)
+  smtpUser                 String?                      // Usuário SMTP (email remetente)
+  smtpPass                 String?                      // Senha/App password SMTP
+  smtpFrom                 String?                      // Nome/email exibido como remetente
+  smtpEnabled              Boolean         @default(false) // Email habilitado para esta empresa
+
   // Configurações do aplicativo
   successMessageDuration   Int             @default(10) // Tempo em segundos da mensagem de sucesso no terminal
   createdAt                DateTime        @default(now())

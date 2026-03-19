@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Query, UseGuards, BadRequestException } from '@nestjs/common'
+import { Controller, Get, Put, Post, Body, Query, UseGuards, BadRequestException } from '@nestjs/common'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { CompanyService } from './company.service'
 import { UpdateCompanyDto } from './dto/update-company.dto'
@@ -25,5 +25,23 @@ export class CompanyController {
       throw new BadRequestException('companyId é obrigatório')
     }
     return this.companyService.updateCompany(companyId, dto)
+  }
+
+  @Get('smtp')
+  async getSmtp(@Query('companyId') companyId: string) {
+    if (!companyId) throw new BadRequestException('companyId é obrigatório')
+    return this.companyService.getSmtpConfig(companyId)
+  }
+
+  @Put('smtp')
+  async updateSmtp(@Query('companyId') companyId: string, @Body() body: any) {
+    if (!companyId) throw new BadRequestException('companyId é obrigatório')
+    return this.companyService.updateSmtpConfig(companyId, body)
+  }
+
+  @Post('smtp/test')
+  async testSmtp(@Query('companyId') companyId: string, @Body() body: any) {
+    if (!companyId) throw new BadRequestException('companyId é obrigatório')
+    return this.companyService.testSmtpConfig(companyId, body)
   }
 }
