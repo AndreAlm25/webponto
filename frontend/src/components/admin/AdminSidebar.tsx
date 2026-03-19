@@ -2,7 +2,7 @@
 // Sidebar do Admin (código em inglês; textos em português)
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import React from 'react'
-import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Scale, ClockIcon, TrendingUp, List, Monitor, Wallet, Shield, FileSearch, Calendar, Stethoscope, Palmtree, Mail } from 'lucide-react'
+import { Briefcase, Building2, Clock, MapPin, Settings, Users, LayoutDashboard, ChevronDown, ChevronRight, FileText, ClockAlert, Scale, ClockIcon, TrendingUp, List, Monitor, Wallet, Shield, FileSearch, Calendar, Stethoscope, Palmtree, Mail, CalendarClock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions'
 
@@ -200,6 +200,17 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                     <span>Registros</span>
                   </button>
                 )}
+                {hasPermission(PERMISSIONS.EMPLOYEES_VIEW) && (
+                  <button
+                    onClick={() => router.push(`${base}/escalas`)}
+                    className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                      isActive(`${base}/escalas`) ? 'bg-muted/50 font-medium' : ''
+                    }`}
+                  >
+                    <CalendarClock className="h-3 w-3 mr-2" />
+                    <span>Escalas</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -242,6 +253,20 @@ export default function AdminSidebar({ collapsed }: { collapsed: boolean }) {
                 >
                   <FileText className="h-4 w-4 mr-2" />
                   <span>Espelho de Ponto</span>
+                </button>
+              )}
+              {hasPermission(PERMISSIONS.EMPLOYEES_VIEW) && (
+                <button
+                  onClick={() => {
+                    router.push(`${base}/escalas`)
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full flex items-center px-3 py-2 text-sm hover:bg-muted/50 rounded-md transition-colors ${
+                    isActive(`${base}/escalas`) ? 'bg-muted/50 font-medium' : ''
+                  }`}
+                >
+                  <CalendarClock className="h-4 w-4 mr-2" />
+                  <span>Escalas</span>
                 </button>
               )}
               {hasPermission(PERMISSIONS.OVERTIME_VIEW) && (

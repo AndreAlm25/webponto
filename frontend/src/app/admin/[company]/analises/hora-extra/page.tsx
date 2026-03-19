@@ -174,6 +174,37 @@ export default function OvertimePage() {
     }
   }
 
+  const exportCSV = () => {
+    if (!entries.length) { toast.error('Nenhum dado para exportar'); return }
+    // Consolidar por funcionário
+    const byEmployee: Record<string, { name: string; pending: number; approved: number; rejected: number; total50: number; total100: number; count: number }> = {}
+    for (const e of entries) {
+      const name = e.employee?.user?.name || e.employee?.registrationId || e.employee?.id
+      if (!byEmployee[name]) byEmployee[name] = { name, pending: 0, approved: 0, rejected: 0, total50: 0, total100: 0, count: 0 }
+      const b = byEmployee[name]
+      b.count++
+      if (e.overtimeStatus === 'PENDING') b.pending++
+      if (e.overtimeStatus === 'APPROVED') b.approved++
+      if (e.overtimeStatus === 'REJECTED') b.rejected++
+      if (e.overtimeType === 'BEFORE' || e.overtimeType === 'AFTER') b.total50 += e.overtimeMinutes
+      if (e.overtimeType === 'HOLIDAY') b.total100 += e.overtimeMinutes
+    }
+    const fmtMin = (m: number) => `${Math.floor(m/60)}h${(m%60).toString().padStart(2,'0')}m`
+    const rows = [
+      ['Funcionário', 'Registros', 'Pendentes', 'Aprovadas', 'Rejeitadas', 'H.E. 50% (total)', 'H.E. 100% (total)'],
+      ...Object.values(byEmployee).map(b => [
+        b.name, b.count, b.pending, b.approved, b.rejected, fmtMin(b.total50), fmtMin(b.total100)
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `horas-extras-consolidado-${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+    toast.success('Relatório exportado!')
+  }
+
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('pt-BR', {
       day: '2-digit',
@@ -224,6 +255,11 @@ export default function OvertimePage() {
             { label: 'Análises' },
             { label: 'Hora Extra' }
           ]}
+          actions={
+            <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2">
+              <Download className="h-4 w-4" /> Exportar Consolidado
+            </Button>
+          }
         />
 
         {/* Cards de Resumo */}

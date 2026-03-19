@@ -15,9 +15,10 @@ interface PageHeaderProps {
   description?: string
   icon?: React.ReactNode
   breadcrumbs?: BreadcrumbItem[]
+  actions?: React.ReactNode
 }
 
-export default function PageHeader({ title, description, icon, breadcrumbs }: PageHeaderProps) {
+export default function PageHeader({ title, description, icon, breadcrumbs, actions }: PageHeaderProps) {
   const { hasPermission } = usePermissions()
 
   // Filtrar breadcrumbs baseado em permissões
@@ -42,16 +43,19 @@ export default function PageHeader({ title, description, icon, breadcrumbs }: Pa
       {filteredBreadcrumbs && <Breadcrumb items={filteredBreadcrumbs} />}
       
       {/* Título com ícone */}
-      <div className="flex items-center gap-3">
-        {icon && (
-          <div className="p-2 rounded-lg bg-primary/10 text-primary">
-            {icon}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {icon && (
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              {icon}
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold">{title}</h1>
+            {description && <p className="text-muted-foreground">{description}</p>}
           </div>
-        )}
-        <div>
-          <h1 className="text-2xl font-bold">{title}</h1>
-          {description && <p className="text-muted-foreground">{description}</p>}
         </div>
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
     </div>
   )

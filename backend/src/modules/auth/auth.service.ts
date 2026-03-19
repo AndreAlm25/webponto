@@ -1,16 +1,19 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { EmailService } from '../../common/email.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private emailService: EmailService,
   ) {}
 
   async login(loginDto: { email: string; password?: string }) {
@@ -42,14 +45,6 @@ export class AuthService {
     if (user.employee && !user.employee.active) {
       throw new UnauthorizedException('Funcionário desativado. Entre em contato com o administrador.');
     }
-
-    // Debug
-    console.log('[AUTH] Usuario encontrado:', {
-      id: user.id,
-      email: user.email,
-      temSenha: !!user.password,
-      senhaLength: user.password?.length
-    });
 
     if (!user.password) {
       throw new UnauthorizedException('Senha não configurada para este usuário');
@@ -204,5 +199,72 @@ export class AuthService {
 
   async me(userId: string) {
     return this.validateUser(userId);
+  }
+
+  // SMTP do SISTEMA — gera token e envia email de recuperação
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } })
+    // Não revelar se o email existe (segurança)
+    if (!user || !user.active) {
+      return { message: 'Se este email estiver cadastrado, você receberá um link em breve.' }
+    }
+
+    const token = crypto.randomBytes(32).toString('hex')
+    const expires = new Date(Date.now() + 60 * 60 * 1000) // 1 hora
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: token, passwordResetExpires: expires },
+    })
+
+    const appUrl = process.env.APP_URL || 'http://localhost:3000'
+    const resetUrl = `${appUrl}/redefinir-senha?token=${token}`
+
+    // Usa SEMPRE o SMTP do sistema (.env)
+    this.emailService.sendSystem(email, '🔑 Recuperação de Senha - WebPonto', `
+      <h2>Olá, ${user.name}!</h2>
+      <p>Recebemos uma solicitação para redefinir sua senha no WebPonto.</p>
+      <p>
+        <a href="${resetUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">
+          Redefinir Senha
+        </a>
+      </p>
+      <p>Ou copie este link: <a href="${resetUrl}">${resetUrl}</a></p>
+      <p><strong>Este link expira em 1 hora.</strong></p>
+      <p>Se você não solicitou isso, ignore este email. Sua senha não será alterada.</p>
+      <hr><small>WebPonto - Sistema de Ponto Eletrônico</small>
+    `)
+
+    return { message: 'Se este email estiver cadastrado, você receberá um link em breve.' }
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    if (!token || !newPassword || newPassword.length < 6) {
+      throw new BadRequestException('Token e senha (mín. 6 caracteres) são obrigatórios')
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetToken: token,
+        passwordResetExpires: { gt: new Date() },
+      },
+    })
+
+    if (!user) {
+      throw new BadRequestException('Token inválido ou expirado. Solicite um novo link.')
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10)
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashed,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    })
+
+    return { message: 'Senha redefinida com sucesso! Você já pode fazer login.' }
   }
 }

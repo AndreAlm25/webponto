@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const { withSentryConfig } = require('@sentry/nextjs');
 const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
@@ -58,4 +59,15 @@ const nextConfig = {
   },
 };
 
-module.exports = withPWA(nextConfig);
+const sentryWebpackPluginOptions = {
+  silent: true, // Não exibir logs do Sentry durante build
+  hideSourceMaps: true, // Não expor sourcemaps em produção
+  disableLogger: true,
+};
+
+// Sentry só ativo se DSN configurado
+const withSentry = process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? (config) => withSentryConfig(config, sentryWebpackPluginOptions)
+  : (config) => config;
+
+module.exports = withSentry(withPWA(nextConfig));

@@ -754,7 +754,7 @@ export default function PayrollPage({ params }: { params: { company: string } })
           </Can>
         )}
 
-        {payroll?.payslips?.length > 0 && (
+        {(payroll?.payslips?.length ?? 0) > 0 && (
           <Button variant="outline" onClick={handleExportCSV}>
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV

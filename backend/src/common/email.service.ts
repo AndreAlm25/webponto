@@ -63,6 +63,7 @@ export class EmailService {
     })
   }
 
+  // Email de empresa: tenta SMTP da empresa, fallback para .env
   async send(to: string, subject: string, html: string, companyId?: string): Promise<boolean> {
     const cfg = await this.resolveConfig(companyId)
     if (!cfg) {
@@ -76,6 +77,33 @@ export class EmailService {
       return true
     } catch (err: any) {
       this.logger.error(`Erro ao enviar email: ${err.message}`)
+      return false
+    }
+  }
+
+  // Email do SISTEMA: usa SEMPRE o SMTP do .env (recuperação de senha, avisos do sistema)
+  async sendSystem(to: string, subject: string, html: string): Promise<boolean> {
+    const host = process.env.SMTP_HOST
+    const user = process.env.SMTP_USER
+    const pass = process.env.SMTP_PASS
+    if (!host || !user || !pass) {
+      this.logger.warn(`Email do sistema não enviado (SMTP_HOST/SMTP_USER/SMTP_PASS não configurados): ${subject} → ${to}`)
+      return false
+    }
+    const cfg: SmtpConfig = {
+      host,
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      user,
+      pass,
+      from: process.env.SMTP_FROM || user,
+    }
+    try {
+      const transporter = this.createTransporter(cfg)
+      await transporter.sendMail({ from: cfg.from, to, subject, html })
+      this.logger.log(`✉️ Email do sistema enviado: ${subject} → ${to}`)
+      return true
+    } catch (err: any) {
+      this.logger.error(`Erro ao enviar email do sistema: ${err.message}`)
       return false
     }
   }

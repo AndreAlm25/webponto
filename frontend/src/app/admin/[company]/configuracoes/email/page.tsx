@@ -135,7 +135,7 @@ export default function EmailConfigPage() {
     <ProtectedPage permission={PERMISSIONS.SETTINGS_EDIT}>
       <PageHeader
         title="Configuração de Email"
-        subtitle="Configure o servidor SMTP para envio de emails da sua empresa"
+        description="Configure o servidor SMTP para envio de emails da sua empresa"
         icon={<Mail className="h-6 w-6" />}
       />
       <PageContainer>

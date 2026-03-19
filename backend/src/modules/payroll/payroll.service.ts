@@ -695,12 +695,30 @@ export class PayrollService {
       },
     })
     // Agrupar dados de pagamento de férias por funcionário
-    const vacationPayDataByEmployee = new Map<string, { days: number; sellDays: number }>()
+    const vacationPayDataByEmployee = new Map<string, { days: number; sellDays: number; doublePayDays: number }>()
     for (const req of vacationRequests) {
-      const current = vacationPayDataByEmployee.get(req.employeeId) || { days: 0, sellDays: 0 }
+      const current = vacationPayDataByEmployee.get(req.employeeId) || { days: 0, sellDays: 0, doublePayDays: 0 }
       vacationPayDataByEmployee.set(req.employeeId, {
         days: current.days + (req.requestedDays || 0),
         sellDays: current.sellDays + (req.sellDays || 0),
+        doublePayDays: current.doublePayDays,
+      })
+    }
+
+    // Buscar férias vencidas pagas em dobro (regularizationType = 'PAID_DOUBLE') neste mês
+    const doublePayVacations = await this.prisma.vacation.findMany({
+      where: {
+        companyId: payroll.companyId,
+        regularizationType: 'PAID_DOUBLE',
+        regularizationDate: { gte: startOfMonth, lte: endOfMonth },
+      },
+      select: { employeeId: true, totalDays: true },
+    })
+    for (const v of doublePayVacations) {
+      const current = vacationPayDataByEmployee.get(v.employeeId) || { days: 0, sellDays: 0, doublePayDays: 0 }
+      vacationPayDataByEmployee.set(v.employeeId, {
+        ...current,
+        doublePayDays: current.doublePayDays + (v.totalDays || 30),
       })
     }
 
@@ -710,7 +728,7 @@ export class PayrollService {
       const employeeAdvances = advancesByEmployee.get(employee.id) || []
       const justifiedAbsenceDays = justifiedDaysByEmployee.get(employee.id) || 0
       const vacationDaysInMonth = vacationDaysByEmployee.get(employee.id) || 0
-      const vacationPayData = vacationPayDataByEmployee.get(employee.id) || { days: 0, sellDays: 0 }
+      const vacationPayData = vacationPayDataByEmployee.get(employee.id) || { days: 0, sellDays: 0, doublePayDays: 0 }
       const payslipData = this.calculatePayslip(employee, entries, payroll.referenceMonth, payroll.referenceYear, config, employeeAdvances, justifiedAbsenceDays, vacationDaysInMonth, vacationPayData)
 
       // Verificar se já existe holerite
@@ -813,7 +831,7 @@ export class PayrollService {
   }
 
   // Calcular dados do holerite de um funcionário
-  private calculatePayslip(employee: any, entries: any[], month: number, year: number, config: any, advances: any[] = [], justifiedAbsenceDays: number = 0, vacationDaysInMonth: number = 0, vacationPayData: { days: number; sellDays: number } = { days: 0, sellDays: 0 }) {
+  private calculatePayslip(employee: any, entries: any[], month: number, year: number, config: any, advances: any[] = [], justifiedAbsenceDays: number = 0, vacationDaysInMonth: number = 0, vacationPayData: { days: number; sellDays: number; doublePayDays?: number } = { days: 0, sellDays: 0, doublePayDays: 0 }) {
     const baseSalary = Number(employee.baseSalary)
     
     // NOVO: Calcular horas/dia baseado no horário do funcionário
@@ -887,6 +905,7 @@ export class PayrollService {
     let vacationPayValue = 0      // Remuneração dos dias de férias
     let vacationBonusValue = 0    // 1/3 constitucional
     let vacationSellValue = 0     // Venda de 1/3 dos dias (abono pecuniário)
+    let vacationDoublePayValue = 0 // Férias vencidas pagas em dobro (CLT art. 137)
     if (vacationPayData.days > 0) {
       const dailyRate = baseSalary / 30
       vacationPayValue = dailyRate * vacationPayData.days
@@ -896,7 +915,16 @@ export class PayrollService {
       const dailyRate = baseSalary / 30
       vacationSellValue = (dailyRate * vacationPayData.sellDays) + ((dailyRate * vacationPayData.sellDays) / 3)
     }
-    const totalVacationEarnings = vacationPayValue + vacationBonusValue + vacationSellValue
+    // Férias vencidas: pagar o dobro (valor normal + valor extra = 2x)
+    // CLT art. 137: férias não concedidas no prazo devem ser pagas em dobro
+    if ((vacationPayData.doublePayDays || 0) > 0) {
+      const dailyRate = baseSalary / 30
+      const normalPay = dailyRate * (vacationPayData.doublePayDays || 0)
+      const bonus = normalPay / 3
+      // doublePayValue = valor total (normal + 1/3) × 2 (dobro) — já subtraindo o que seria normal
+      vacationDoublePayValue = (normalPay + bonus) // extra além do salário base (que já está incluso)
+    }
+    const totalVacationEarnings = vacationPayValue + vacationBonusValue + vacationSellValue + vacationDoublePayValue
 
     // Proventos totais
     const totalEarnings = baseSalary + overtimeValue50 + overtimeValue100 + customEarnings + totalVacationEarnings
@@ -1037,6 +1065,8 @@ export class PayrollService {
       vacationBonusValue,
       vacationSellDays: vacationPayData.sellDays,
       vacationSellValue,
+      vacationDoublePayDays: vacationPayData.doublePayDays || 0,
+      vacationDoublePayValue,
       totalVacationEarnings,
       totalEarnings,
       absenceDays,

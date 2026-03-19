@@ -115,10 +115,12 @@ model User {
   phone        String?
   role         Role      @default(EMPLOYEE)
   active       Boolean   @default(true)
-  avatarUrl    String?
-  employeeId   String?   @unique @db.Uuid
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  avatarUrl            String?
+  employeeId           String?   @unique @db.Uuid
+  passwordResetToken   String?                      // Token de recuperação de senha
+  passwordResetExpires DateTime?                    // Expiração do token (1 hora)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
   sentMessages      Message[]
   auditLogs         AuditLog[]
   approvedVacations Vacation[]
@@ -600,6 +602,8 @@ model Payslip {
   vacationBonusValue  Decimal       @default(0) @db.Decimal(10, 2) // 1/3 constitucional de férias
   vacationSellDays    Int           @default(0)                     // Dias vendidos (abono pecuniário)
   vacationSellValue   Decimal       @default(0) @db.Decimal(10, 2) // Valor do abono pecuniário
+  vacationDoublePayDays Int         @default(0)                     // Dias de férias vencidas pagas em dobro (CLT art. 137)
+  vacationDoublePayValue Decimal    @default(0) @db.Decimal(10, 2) // Valor adicional das férias em dobro
   totalVacationEarnings Decimal     @default(0) @db.Decimal(10, 2) // Total proventos de férias
   totalEarnings       Decimal       @default(0) @db.Decimal(12, 2) // Total proventos
   

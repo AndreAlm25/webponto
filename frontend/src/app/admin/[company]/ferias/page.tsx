@@ -189,7 +189,7 @@ export default function FeriasPage() {
     const unsubCreate = onVacationRequestCreated((request) => {
       console.log('[FÉRIAS WS] Nova solicitação recebida:', request)
       // Adicionar à lista de solicitações
-      setVacationRequests(prev => [request, ...prev])
+      setVacationRequests(prev => [request as unknown as VacationRequest, ...prev])
       toast.info('Nova solicitação de férias recebida!')
     })
 
