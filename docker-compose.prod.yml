@@ -1,0 +1,213 @@
+version: '3.8'
+
+# ============================================================
+# docker-compose PRODUÇÃO — WebPonto
+# ============================================================
+# O que este arquivo INCLUI:
+#   - frontend (Next.js)
+#   - backend  (NestJS)
+#   - redis    (cache interno)
+#   - compreface-postgres-db (banco exclusivo do CompreFace)
+#   - compreface-core
+#   - compreface-api
+#   - compreface-admin
+#   - compreface-fe
+#
+# O que este arquivo NÃO inclui (já existe no servidor):
+#   - PostgreSQL principal (use DATABASE_URL apontando para o externo)
+#   - MinIO               (use as variáveis S3_* apontando para o externo)
+#   - Portainer / Traefik (já rodando no servidor)
+#
+# Uso:
+#   cp .env.prod.example .env.prod
+#   # edite .env.prod com os valores reais
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# ============================================================
+
+services:
+
+  # ===== FRONTEND (Next.js standalone) =====
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+        - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+        - NEXT_PUBLIC_COMPREFACE_URL=${NEXT_PUBLIC_COMPREFACE_URL}
+        - NEXT_PUBLIC_COMPREFACE_API_KEY=${NEXT_PUBLIC_COMPREFACE_API_KEY}
+        - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
+    container_name: webponto_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+      - BACKEND_URL=http://backend:4000
+    depends_on:
+      - backend
+    networks:
+      - webponto_network
+    labels:
+      # Traefik labels — ajuste o domínio conforme necessário
+      - "traefik.enable=true"
+      - "traefik.http.routers.webponto-front.rule=Host(`${FRONTEND_DOMAIN}`)"
+      - "traefik.http.routers.webponto-front.entrypoints=websecure"
+      - "traefik.http.routers.webponto-front.tls=true"
+      - "traefik.http.services.webponto-front.loadbalancer.server.port=3000"
+
+  # ===== BACKEND (NestJS) =====
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: webponto_backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      # Banco principal externo
+      - DATABASE_URL=${DATABASE_URL}
+      # JWT
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      # MinIO externo
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_PORT=${MINIO_PORT:-9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
+      # CompreFace (interno — container na mesma rede)
+      - COMPREFACE_API_URL=http://compreface-api:8080
+      - COMPREFACE_API_KEY=${COMPREFACE_API_KEY}
+      - COMPREFACE_THRESHOLD=${COMPREFACE_THRESHOLD:-0.85}
+      - COMPREFACE_DET_PROB=${COMPREFACE_DET_PROB:-0.2}
+      # Redis interno
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # CORS
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      # SMTP sistema (recuperação de senha)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - APP_URL=${APP_URL}
+      # Sentry (opcional)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      # URL pública do MinIO (para links de arquivos)
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-}
+    depends_on:
+      - redis
+      - compreface-api
+    networks:
+      - webponto_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webponto-api.rule=Host(`${API_DOMAIN}`)"
+      - "traefik.http.routers.webponto-api.entrypoints=websecure"
+      - "traefik.http.routers.webponto-api.tls=true"
+      - "traefik.http.services.webponto-api.loadbalancer.server.port=4000"
+
+  # ===== REDIS (cache interno — leve, não precisa ser externo) =====
+  redis:
+    image: redis:7-alpine
+    container_name: webponto_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - webponto_network
+
+  # ===== COMPREFACE STACK (Reconhecimento Facial) =====
+
+  compreface-postgres-db:
+    image: postgres:11.5
+    container_name: webponto_compreface_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${COMPREFACE_DB_PASSWORD:-postgres}
+      POSTGRES_DB: frs
+    volumes:
+      - compreface_postgres_data:/var/lib/postgresql/data
+    networks:
+      - webponto_network
+
+  compreface-core:
+    image: exadel/compreface-core:1.2.0
+    container_name: webponto_compreface_core
+    restart: unless-stopped
+    environment:
+      ML_PORT: 3000
+    networks:
+      - webponto_network
+
+  compreface-api:
+    image: exadel/compreface-api:1.2.0
+    container_name: webponto_compreface_api
+    restart: unless-stopped
+    environment:
+      POSTGRES_URL: jdbc:postgresql://compreface-postgres-db:5432/frs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${COMPREFACE_DB_PASSWORD:-postgres}
+      SPRING_PROFILES_ACTIVE: dev
+      API_JAVA_OPTS: -Xmx4g
+      SAVE_IMAGES_TO_DB: "true"
+      MAX_FILE_SIZE: 5MB
+      MAX_REQUEST_SIZE: 10MB
+    depends_on:
+      - compreface-postgres-db
+      - compreface-core
+    networks:
+      - webponto_network
+
+  compreface-admin:
+    image: exadel/compreface-admin:1.2.0
+    container_name: webponto_compreface_admin
+    restart: unless-stopped
+    environment:
+      POSTGRES_URL: jdbc:postgresql://compreface-postgres-db:5432/frs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${COMPREFACE_DB_PASSWORD:-postgres}
+      SPRING_PROFILES_ACTIVE: dev
+      ADMIN_JAVA_OPTS: -Xmx4g
+      MAX_FILE_SIZE: 5MB
+      MAX_REQUEST_SIZE: 10MB
+      ENABLE_EMAIL_SERVER: "false"
+    depends_on:
+      - compreface-postgres-db
+      - compreface-api
+    networks:
+      - webponto_network
+
+  compreface-fe:
+    image: exadel/compreface-fe:1.2.0
+    container_name: webponto_compreface_fe
+    restart: unless-stopped
+    environment:
+      CLIENT_MAX_BODY_SIZE: 10M
+      API_URL: http://compreface-api:8080
+      PROXY_READ_TIMEOUT: 300s
+      PROXY_CONNECT_TIMEOUT: 10s
+    depends_on:
+      - compreface-api
+      - compreface-admin
+    networks:
+      - webponto_network
+
+networks:
+  webponto_network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
+  compreface_postgres_data:
+    driver: local
