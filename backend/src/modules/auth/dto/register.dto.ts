@@ -1,6 +1,7 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, IsEnum, IsUUID } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsEnum, IsUUID } from 'class-validator';
 import { Role } from '@prisma/client';
 
+// DTO para registro de usuário em empresa existente (uso interno/admin)
 export class RegisterDto {
   @IsEmail({}, { message: 'Email inválido' })
   @IsNotEmpty({ message: 'Email é obrigatório' })
@@ -22,4 +23,40 @@ export class RegisterDto {
   @IsUUID('4', { message: 'ID da empresa deve ser um UUID válido' })
   @IsNotEmpty({ message: 'ID da empresa é obrigatório' })
   companyId: string;
+}
+
+// DTO para registro público de empresa + admin (cadastro via landing page)
+export class RegisterCompanyDto {
+  @IsString({ message: 'Nome fantasia deve ser uma string' })
+  @IsNotEmpty({ message: 'Nome fantasia é obrigatório' })
+  tradeName: string;
+
+  @IsString({ message: 'Razão social deve ser uma string' })
+  @IsNotEmpty({ message: 'Razão social é obrigatória' })
+  legalName: string;
+
+  @IsString({ message: 'CNPJ deve ser uma string' })
+  @IsNotEmpty({ message: 'CNPJ é obrigatório' })
+  cnpj: string;
+
+  @IsEmail({}, { message: 'Email da empresa inválido' })
+  @IsOptional()
+  email?: string;
+
+  @IsString({ message: 'Nome do admin deve ser uma string' })
+  @IsNotEmpty({ message: 'Nome do administrador é obrigatório' })
+  adminName: string;
+
+  @IsEmail({}, { message: 'Email do admin inválido' })
+  @IsNotEmpty({ message: 'Email do administrador é obrigatório' })
+  adminEmail: string;
+
+  @IsString({ message: 'Senha deve ser uma string' })
+  @IsNotEmpty({ message: 'Senha é obrigatória' })
+  @MinLength(6, { message: 'Senha deve ter no mínimo 6 caracteres' })
+  adminPassword: string;
+
+  @IsString({ message: 'Plano inválido' })
+  @IsOptional()
+  plan?: string;
 }

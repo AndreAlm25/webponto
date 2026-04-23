@@ -1,8 +1,8 @@
-import { Controller, Post, Body, Get, UseGuards, HttpCode } from '@nestjs/common';
+import { Controller, Post, Put, Patch, Body, Get, UseGuards, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterDto, RegisterCompanyDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 
@@ -21,6 +21,11 @@ export class AuthController {
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Post('register-company')
+  async registerCompany(@Body() registerCompanyDto: RegisterCompanyDto) {
+    return this.authService.registerCompany(registerCompanyDto);
   }
 
   @Get('me')

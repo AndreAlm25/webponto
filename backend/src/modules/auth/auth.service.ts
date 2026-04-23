@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterDto, RegisterCompanyDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { EmailService } from '../../common/email.service';
 
@@ -167,6 +167,100 @@ export class AuthService {
           tradeName: company.tradeName,
           cnpj: company.cnpj,
         },
+      },
+    };
+  }
+
+  async registerCompany(data: RegisterCompanyDto) {
+    const { tradeName, legalName, cnpj, email, adminName, adminEmail, adminPassword, plan } = data;
+
+    // Verificar se empresa com este CNPJ já existe
+    const existingCompany = await this.prisma.company.findUnique({
+      where: { cnpj },
+    });
+
+    if (existingCompany) {
+      throw new ConflictException('CNPJ já cadastrado');
+    }
+
+    // Verificar se email do admin já existe
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: adminEmail },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('Email do administrador já cadastrado');
+    }
+
+    // Gerar slug a partir do nome fantasia
+    const slug = tradeName
+      .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+
+    // Criar empresa e admin em transação
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Criar empresa
+      const company = await tx.company.create({
+        data: {
+          tradeName,
+          legalName,
+          cnpj,
+          email: email || adminEmail,
+          slug,
+          plan: (plan as any) || 'TRIAL',
+          status: 'ACTIVE',
+          active: true,
+        },
+      });
+
+      // Criar PayrollConfig padrão
+      await tx.payrollConfig.create({
+        data: { companyId: company.id },
+      });
+
+      // Criar admin da empresa
+      const passwordHash = await bcrypt.hash(adminPassword, 10);
+      const admin = await tx.user.create({
+        data: {
+          email: adminEmail,
+          name: adminName,
+          password: passwordHash,
+          role: 'COMPANY_ADMIN',
+          companyId: company.id,
+          active: true,
+        },
+      });
+
+      return { company, admin };
+    });
+
+    // Gerar token para o admin
+    const payload: JwtPayload = {
+      sub: result.admin.id,
+      email: result.admin.email,
+      role: result.admin.role,
+      companyId: result.company.id,
+    };
+
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      success: true,
+      message: 'Empresa cadastrada com sucesso',
+      accessToken,
+      company: {
+        id: result.company.id,
+        tradeName: result.company.tradeName,
+        legalName: result.company.legalName,
+        cnpj: result.company.cnpj,
+        slug: result.company.slug,
+        plan: result.company.plan,
+      },
+      admin: {
+        id: result.admin.id,
+        email: result.admin.email,
+        name: result.admin.name,
+        role: result.admin.role,
       },
     };
   }

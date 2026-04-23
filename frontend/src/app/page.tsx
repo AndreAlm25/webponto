@@ -22,7 +22,7 @@ export default function Home() {
           </nav>
           <div className="flex items-center gap-3">
             <a href="/login" className="px-4 py-2 text-sm rounded-md border hover:bg-accent transition">Entrar</a>
-            <a href="/login" className="px-4 py-2 text-sm rounded-md bg-webponto-blue text-white hover:bg-webponto-blue-dark transition">Cadastrar</a>
+            <a href="/cadastro" className="px-4 py-2 text-sm rounded-md bg-webponto-blue text-white hover:bg-webponto-blue-dark transition">Cadastrar</a>
           </div>
         </div>
       </header>
@@ -140,7 +140,7 @@ export default function Home() {
                 <li key={i} className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-webponto-blue" /> {f}</li>
               ))}
             </ul>
-            <a href="/login" className="mt-6 inline-block w-full text-center px-4 py-2 rounded-md bg-webponto-blue text-white hover:bg-webponto-blue-dark transition">Começar</a>
+            <a href="/cadastro" className="mt-6 inline-block w-full text-center px-4 py-2 rounded-md bg-webponto-blue text-white hover:bg-webponto-blue-dark transition">Começar</a>
           </div>
           {/* Business */}
           <div className="rounded-2xl border bg-card p-6 shadow-lg ring-1 ring-webponto-blue/20">
@@ -153,7 +153,7 @@ export default function Home() {
                 <li key={i} className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-webponto-blue" /> {f}</li>
               ))}
             </ul>
-            <a href="/login" className="mt-6 inline-block w-full text-center px-4 py-2 rounded-md bg-webponto-blue text-white hover:bg-webponto-blue-dark transition">Assinar</a>
+            <a href="/cadastro" className="mt-6 inline-block w-full text-center px-4 py-2 rounded-md bg-webponto-blue text-white hover:bg-webponto-blue-dark transition">Assinar</a>
           </div>
           {/* Enterprise */}
           <div className="rounded-2xl border bg-card p-6 shadow-sm">
@@ -194,7 +194,7 @@ export default function Home() {
         <h2 className="text-2xl md:text-3xl font-bold">Pronto para modernizar seu controle de ponto?</h2>
         <p className="mt-2 text-muted-foreground max-w-2xl mx-auto">Comece agora mesmo com o WebPonto.</p>
         <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-          <a href="/login" className="px-6 py-3 rounded-lg bg-webponto-blue text-white hover:bg-webponto-blue-dark transition font-medium">Acessar sistema</a>
+          <a href="/cadastro" className="px-6 py-3 rounded-lg bg-webponto-blue text-white hover:bg-webponto-blue-dark transition font-medium">Cadastrar empresa</a>
           <a href="#planos" className="px-6 py-3 rounded-lg border border-border hover:bg-accent transition font-medium">Ver planos</a>
         </div>
       </section>

@@ -1,0 +1,133 @@
+version: '3.8'
+
+# ============================================================
+# docker-stack.yml — WebPonto PRODUÇÃO (Docker Swarm)
+# ============================================================
+# Deploy: docker stack deploy -c docker-stack.yml --env-file .env.prod webponto
+# As imagens devem estar buildadas localmente antes:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod build
+# ============================================================
+
+services:
+
+  # ===== FRONTEND (Next.js standalone) =====
+  frontend:
+    image: webponto-frontend:latest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+        # Rota principal do frontend (todas as páginas)
+        - "traefik.http.routers.webponto-front.rule=Host(`${FRONTEND_DOMAIN}`)"
+        - "traefik.http.routers.webponto-front.entrypoints=websecure"
+        - "traefik.http.routers.webponto-front.tls=true"
+        - "traefik.http.routers.webponto-front.priority=1"
+        - "traefik.http.services.webponto-front.loadbalancer.server.port=3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+      - BACKEND_URL=http://backend:4000
+    networks:
+      - webponto_network
+      - network_public
+
+  # ===== BACKEND (NestJS) =====
+  backend:
+    image: webponto-backend:latest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+        # Rota pelo domínio próprio da API
+        - "traefik.http.routers.webponto-api.rule=Host(`${API_DOMAIN}`)"
+        - "traefik.http.routers.webponto-api.entrypoints=websecure"
+        - "traefik.http.routers.webponto-api.tls=true"
+        - "traefik.http.routers.webponto-api.priority=1"
+        - "traefik.http.services.webponto-api.loadbalancer.server.port=4000"
+        # Rota /api/* pelo domínio do frontend → backend (prioridade alta, exceto /api/cnpj que fica no Next.js)
+        - "traefik.http.routers.webponto-front-api.rule=Host(`${FRONTEND_DOMAIN}`) && PathPrefix(`/api/`) && !PathPrefix(`/api/cnpj`)"
+        - "traefik.http.routers.webponto-front-api.entrypoints=websecure"
+        - "traefik.http.routers.webponto-front-api.tls=true"
+        - "traefik.http.routers.webponto-front-api.priority=10"
+        - "traefik.http.routers.webponto-front-api.service=webponto-api"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - MINIO_ENDPOINT=192.168.18.14
+      - MINIO_PORT=${MINIO_PORT:-9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
+      - MINIO_PUBLIC_URL=http://192.168.18.14:9000
+      - S3_BUCKET=${S3_BUCKET:-webponto}
+      - MINIO_BUCKET=${MINIO_BUCKET:-webponto}
+      - COMPREFACE_API_URL=http://192.168.18.44:8080
+      - COMPREFACE_API_KEY=${COMPREFACE_API_KEY}
+      - COMPREFACE_THRESHOLD=${COMPREFACE_THRESHOLD:-0.85}
+      - COMPREFACE_DET_PROB=${COMPREFACE_DET_PROB:-0.2}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - APP_URL=${APP_URL}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    networks:
+      - webponto_network
+      - network_public
+
+  # ===== POSTGRESQL DEDICADO =====
+  postgres:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webponto}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-webponto_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - webponto_network
+      - network_public
+
+  # ===== REDIS =====
+  redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - webponto_network
+
+networks:
+  webponto_network:
+    driver: overlay
+    attachable: true
+  network_public:
+    external: true
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

@@ -51,9 +51,10 @@ const nextConfig = {
   async rewrites() {
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
     return [
+      // Proxy tudo em /api/ EXCETO /api/cnpj/* (rotas locais do Next.js)
       {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
+        source: '/api/((?!cnpj).*)',
+        destination: `${backendUrl}/api/$1`,
       },
     ];
   },
